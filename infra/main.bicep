@@ -236,6 +236,31 @@ param azureFirewallSubnetPrefix string = '192.168.2.128/26' // 192.168.2.128–1
 @description('Gateway subnet — Required /26 (64 IPs, CIDR-aligned)')
 param gatewaySubnetPrefix string = '192.168.2.192/26' // 192.168.2.192–192.168.2.255
 
+@description('Deploy an Entra/OpenVPN point-to-site gateway and inbound DNS resolver. Requires network isolation; disabled by default.')
+param deployVpnGateway bool = false
+
+@description('Point-to-site IPv4 client CIDR. Required when VPN is enabled and must not overlap any connected network.')
+param vpnClientAddressPool string = ''
+
+@description('Dedicated /28 or larger DNS resolver subnet CIDR inside the VNet. Required when VPN is enabled.')
+param vpnDnsResolverSubnetPrefix string = ''
+
+@description('Name of the dedicated DNS resolver subnet.')
+param vpnDnsResolverSubnetName string = 'vpn-dns-subnet'
+
+@description('Entra tenant for VPN authentication.')
+param vpnTenantId string = subscription().tenantId
+
+@description('Microsoft-registered Azure VPN Client audience in Azure public cloud.')
+param vpnAudience string = 'c632b3df-fb67-4d84-bdcf-b95ad541b5c8'
+
+@description('Gateway SKU; incurs charges while provisioned.')
+@allowed(['VpnGw1AZ', 'VpnGw2AZ'])
+param vpnGatewaySku string = 'VpnGw1AZ'
+
+@description('Optional VPN gateway name override; empty uses the workload resource token.')
+param vpnGatewayName string = ''
+
 @description('Application Gateway subnet — /27 (32 IPs)')
 param azureAppGatewaySubnetPrefix string = '192.168.3.0/27' // 192.168.3.0–192.168.3.31
 
@@ -1406,6 +1431,7 @@ module routeTable 'modules/networking/route-table.bicep' = if (_createRouteTable
     name: '${const.abbrs.networking.routeTable}${resourceToken}'
     location: location
     tags: _tags
+    allowGatewayRoutePropagation: deployVpnGateway
   }
 }
 
@@ -1437,7 +1463,7 @@ var baseSubnets = [
         delegation: ''
       }
       {
-        name: gatewaySubnetName
+        name: deployVpnGateway ? 'GatewaySubnet' : gatewaySubnetName
         addressPrefix: gatewaySubnetPrefix 
         delegation: ''
         serviceEndpoints : []
@@ -1475,6 +1501,7 @@ var baseSubnets = [
       {
         name: acaEnvironmentSubnetName
         addressPrefix: acaEnvironmentSubnetPrefix  
+        natGatewayResourceId: _effectiveNatGatewayId
         // Match the agent-subnet delegation casing (see comment above). Canonical
         // 'Microsoft.App/environments' avoids any case-sensitive lookup downstream.
         delegation: 'Microsoft.App/environments'
@@ -1492,7 +1519,14 @@ var baseSubnets = [
       }
 ]
 
-var subnets = concat(baseSubnets, _separateApplicationPeSubnet ? [
+var subnets = concat(baseSubnets, deployVpnGateway ? [
+  {
+    name: vpnDnsResolverSubnetName
+    addressPrefix: vpnDnsResolverSubnetPrefix
+    delegation: 'Microsoft.Network/dnsResolvers'
+    serviceEndpoints: []
+  }
+] : [], _separateApplicationPeSubnet ? [
   {
     name: applicationPeSubnetName
     addressPrefix: applicationPeSubnetPrefix
@@ -1529,7 +1563,7 @@ module virtualNetworkSubnets 'modules/networking/subnets.bicep' = if (_networkIs
     useExistingVNet: useExistingVNet
     virtualNetworkResourceId: virtualNetworkResourceId
   }
-  dependsOn: [networkLayoutValidation]
+  dependsOn: [networkLayoutValidation, vpnLayoutValidation]
 }
 
 // VNet
@@ -1546,7 +1580,49 @@ module virtualNetwork 'br/public:avm/res/network/virtual-network:0.7.0' = if (_n
     tags: _tags
     subnets: subnets
   }
-  dependsOn: [networkLayoutValidation]
+  dependsOn: [networkLayoutValidation, vpnLayoutValidation]
+}
+
+module vpnLayoutValidation 'modules/validation/vpn-layout.bicep' = if (deployVpnGateway) {
+  name: 'vpnLayoutValidation'
+  params: {
+    networkIsolation: networkIsolation
+    clientPool: vpnClientAddressPool
+    dnsSubnet: vpnDnsResolverSubnetPrefix
+    dnsSubnetName: vpnDnsResolverSubnetName
+    gatewaySubnet: gatewaySubnetPrefix
+    existingSubnetNames: map(baseSubnets, subnet => subnet.name)
+    existingSubnetPrefixes: concat(map(baseSubnets, subnet => subnet.addressPrefix), _separateApplicationPeSubnet ? [applicationPeSubnetPrefix] : [])
+    vnetPrefixes: vnetAddressPrefixes
+    tenantId: empty(vpnTenantId) ? subscription().tenantId : vpnTenantId
+    audience: vpnAudience
+  }
+}
+
+module pointToSiteVpn 'modules/networking/point-to-site-vpn.bicep' = if (deployVpnGateway) {
+  scope: resourceGroup(_networkResourceGroupName)
+  name: 'pointToSiteVpnDeployment'
+  params: {
+    name: empty(vpnGatewayName) ? '${const.abbrs.networking.virtualNetworkGateway}${resourceToken}' : vpnGatewayName
+    location: location
+    gatewaySubnetResourceId: networkIsolation
+      ? '${virtualNetworkResourceId}/subnets/GatewaySubnet'
+      : fail('VPN Gateway requires networkIsolation=true.')
+    virtualNetworkResourceId: virtualNetworkResourceId
+    dnsResolverSubnetResourceId: '${virtualNetworkResourceId}/subnets/${vpnDnsResolverSubnetName}'
+    dnsResolverAddress: cidrHost(vpnDnsResolverSubnetPrefix, 4)
+    clientAddressPool: empty(vpnClientAddressPool)
+      ? fail('VPN_CLIENT_ADDRESS_POOL is required when VPN is enabled.')
+      : vpnClientAddressPool
+    tenantId: empty(vpnTenantId) ? subscription().tenantId : vpnTenantId
+    audience: vpnAudience
+    sku: vpnGatewaySku
+    tags: _tags
+  }
+  dependsOn: [
+    virtualNetwork
+    virtualNetworkSubnets
+  ]
 }
 
 // Gap 7 — Spoke→hub VNet peering.
@@ -2684,6 +2760,17 @@ resource containerEnv 'Microsoft.App/managedEnvironments@2025-01-01' = if (deplo
     #disable-next-line BCP321
     useExistingVNet ? virtualNetworkSubnets : null
   ]
+}
+
+module containerAppsPrivateDns 'modules/networking/container-apps-private-dns.bicep' = if (_networkIsolation && deployContainerEnv && !policyManagedPrivateDns) {
+  scope: resourceGroup(_networkResourceGroupName)
+  name: 'containerAppsPrivateDns'
+  params: {
+    domain: containerEnv!.properties.defaultDomain
+    staticIp: containerEnv!.properties.staticIp
+    virtualNetworkResourceId: virtualNetworkResourceId
+    tags: _tags
+  }
 }
 
 //Container Registry User Managed Identity
@@ -4056,6 +4143,7 @@ output LOCATION string = location
 output ENVIRONMENT_NAME string = environmentName
 output DEPLOYMENT_NAME string = deployment().name
 output RESOURCE_TOKEN string = resourceToken
+
 output NETWORK_ISOLATION bool = _networkIsolation
 output USE_UAI bool = _useUAI
 output USE_CAPP_API_KEY bool = _useCAppAPIKey

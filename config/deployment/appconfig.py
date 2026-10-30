@@ -23,6 +23,7 @@ from config.deployment.composition import (
 from util.azure_cli import resolve_az_command
 from config.deployment.context import context_settings
 from config.deployment.resource_groups import resource_group_for
+from config.search.schema_selection import public_settings as search_public_settings
 
 
 def _resolve_az_command() -> str:
@@ -138,6 +139,7 @@ def build_settings(
     mode = resolve_mode(environment)
     deploy_ingestion = resolve_ingestion_selection(environment)
     validate_ingestion_selection(environment, deploy_ingestion)
+    search_settings = search_public_settings(environment)
     hosted = mode is not DeploymentMode.CLASSIC
     resource_group = resource_group_for(environment, "application")
     subscription = (environment.get("AZURE_SUBSCRIPTION_ID") or environment.get("SUBSCRIPTION_ID") or "").strip()
@@ -148,9 +150,9 @@ def build_settings(
     )
 
     app_names = {
-        "frontend": f"ca-{resource_token}-frontend",
-        "dataingest": f"ca-{resource_token}-dataingest",
-        "orchestrator": f"ca-{resource_token}-orchestrator",
+        "frontend": environment.get("FRONTEND_APP_NAME") or f"ca-{resource_token}-frontend",
+        "dataingest": environment.get("DATA_INGEST_APP_NAME") or f"ca-{resource_token}-dataingest",
+        "orchestrator": environment.get("ORCHESTRATOR_APP_NAME") or f"ca-{resource_token}-orchestrator",
     }
     hosted_base_url = (environment.get("HOSTED_AGENT_BASE_URL") or "").strip()
     hosted_scope = (environment.get("HOSTED_AGENT_RESOURCE_SCOPE") or "").strip()
@@ -217,10 +219,7 @@ def build_settings(
     return {
         **deployment_context,
         DEPLOY_INGESTION_CONTAINER_APP: str(deploy_ingestion).lower(),
-        **(
-            {"SEARCH_RAG_INDEX_NAME": environment["SEARCH_RAG_INDEX_NAME"].strip()}
-            if (environment.get("SEARCH_RAG_INDEX_NAME") or "").strip() else {}
-        ),
+        **search_settings,
         "DEPLOY_HOSTED_AGENT_ORCHESTRATION": str(runtime_hosted).lower(),
         "PREPARE_HOSTED_AGENT": str(prepare_hosted).lower(),
         "DEPLOY_HOSTED_AGENT": (

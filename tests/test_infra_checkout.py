@@ -96,3 +96,14 @@ def test_main_bicep_reads_root_manifest_and_infra_source_tag() -> None:
     assert "loadJsonContent('../manifest.json')" in bicep
     assert "_manifest.infra.source.tag" in bicep
     assert "_manifest.ailz_tag" not in bicep
+
+
+@pytest.mark.parametrize("relative_path", ["main.parameters.json", "infra/main.parameters.json"])
+def test_parameter_files_only_supply_declared_bicep_parameters(relative_path: str) -> None:
+    bicep = (REPO_ROOT / "infra" / "main.bicep").read_text(encoding="utf-8")
+    declared = set(re.findall(r"^param\s+(\w+)\s+", bicep, re.MULTILINE))
+    document = json.loads((REPO_ROOT / relative_path).read_text(encoding="utf-8"))
+
+    unsupported = set(document["parameters"]) - declared
+
+    assert not unsupported, f"{relative_path} supplies undeclared parameters: {sorted(unsupported)}"

@@ -311,7 +311,7 @@ function Set-AgentLzAppConfiguration {
                 }
                 return $declaredName
             }
-            $json = az resource list --subscription $subscriptionId -g $Group --resource-type $Type -o json 2>$null
+            $json = az resource list --subscription $subscriptionId -g $Group --resource-type $Type --location= -o json 2>$null
             if ($LASTEXITCODE -ne 0 -or -not $json) { throw "Failed to discover '$Type' in its configured destination." }
             $items = $json | ConvertFrom-Json -NoEnumerate
             if ($null -eq $items -or $items -isnot [array]) { throw "Invalid resource discovery response for '$Type'." }
@@ -367,7 +367,8 @@ function Set-AgentLzAppConfiguration {
         _resolveResource `
             -Type 'Microsoft.DocumentDB/databaseAccounts' `
             -Fallback "cosmos-$nameSuffix" `
-            -Filter { -not $_.name.StartsWith('cosmos-aif') }
+            -Filter { -not $_.name.StartsWith('cosmos-aif') } `
+            -PreferredName (Get-OptionalEnvValue 'DATABASE_ACCOUNT_NAME')
     } else { '' }
 
     # Search: main vs AI Foundry-project search (prefix "srch-aif")
@@ -402,6 +403,7 @@ function Set-AgentLzAppConfiguration {
             --subscription $subscriptionId `
             --resource-group $foundryResourceGroup `
             --resource-type 'Microsoft.CognitiveServices/accounts/projects' `
+            --location= `
             -o json 2>$null
     }
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($projectJson)) {
@@ -457,7 +459,8 @@ function Set-AgentLzAppConfiguration {
         )
     $containerEnvName = _resolveResource `
         -Type 'Microsoft.App/managedEnvironments' `
-        -Fallback "cae-$nameSuffix"
+        -Fallback "cae-$nameSuffix" `
+        -PreferredName (Get-OptionalEnvValue 'CONTAINER_ENV_NAME')
     $logAnalyticsName = _resolveResource `
         -ResourceId (Get-OptionalEnvValue 'LOG_ANALYTICS_RESOURCE_ID') `
         -Type 'Microsoft.OperationalInsights/workspaces' `
@@ -469,9 +472,9 @@ function Set-AgentLzAppConfiguration {
 
     # Container apps use the RESOURCE_TOKEN suffix from Agent Landing Zone's own bicep - this is
     # stable across naming modes.
-    $frontendAppName = "ca-$nameSuffix-frontend"
-    $orchestratorAppName = "ca-$nameSuffix-orchestrator"
-    $dataIngestAppName = if ($deployIngestion) { "ca-$nameSuffix-dataingest" } else { '' }
+    $frontendAppName = Get-OptionalEnvValue 'FRONTEND_APP_NAME' "ca-$nameSuffix-frontend"
+    $orchestratorAppName = Get-OptionalEnvValue 'ORCHESTRATOR_APP_NAME' "ca-$nameSuffix-orchestrator"
+    $dataIngestAppName = if ($deployIngestion) { Get-OptionalEnvValue 'DATA_INGEST_APP_NAME' "ca-$nameSuffix-dataingest" } else { '' }
 
     # Cosmos database name - introspect the account to get the actual DB name
     $databaseName = if ($cosmosEnabled) { Get-OptionalEnvValue 'DATABASE_NAME' } else { '' }
@@ -598,6 +601,7 @@ function Set-AgentLzAppConfiguration {
         DEPLOYMENT_NAME = $deploymentName
         RESOURCE_TOKEN = $resourceToken
         SEARCH_RAG_INDEX_NAME = $ragIndexName
+        SEARCH_RAG_SCHEMA = (Get-OptionalEnvValue 'SEARCH_RAG_SCHEMA' 'standard').Trim()
         ENABLE_AGENTIC_RETRIEVAL = (Get-OptionalEnvValue 'ENABLE_AGENTIC_RETRIEVAL' 'false')
         RETRIEVAL_BACKEND = $retrievalBackend
         FOUNDRY_IQ_PATTERN = $foundryIqPattern
@@ -791,6 +795,8 @@ function Set-AgentLzAppConfiguration {
     Write-Host "✅ Agent Landing Zone App Configuration populated ($($flatSettings.Count) keys)."
 }
 
+Invoke-PythonModule -ModuleName 'config.search.schema_selection'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Set-AgentLzAppConfiguration -Endpoint (Get-RequiredEnvValue 'APP_CONFIG_ENDPOINT') -Label 'agent-lz'
 Invoke-PythonModule -ModuleName 'config.deployment.appconfig'
 if ($LASTEXITCODE -ne 0) {

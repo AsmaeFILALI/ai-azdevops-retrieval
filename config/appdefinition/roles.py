@@ -211,6 +211,7 @@ def resolve_scope(scope: str, environment: Mapping[str, str], resource_group: st
 
 def _resolve_identity(
     service: str, resource_group: str, run_az: RunAz, subscription: str = "",
+    preferred_name: str = "",
 ) -> tuple[str, str, str]:
     arguments = ["containerapp", "list", "--resource-group", resource_group, "--query",
                  f"[?tags.\"azd-service-name\"=='{service}'].{{name:name,identity:identity}}"]
@@ -218,6 +219,8 @@ def _resolve_identity(
         arguments += ["--subscription", subscription]
     apps = _json(run_az, arguments)
     apps = [app for app in apps or [] if isinstance(app, dict)]
+    if preferred_name:
+        apps = [app for app in apps if str(app.get("name", "")).lower() == preferred_name.lower()]
     if len(apps) != 1:
         raise RoleAssignmentError(
             f"Expected one Container App tagged azd-service-name={service} in resource group "
@@ -238,9 +241,18 @@ def _resolve_identity(
     return identities[0]
 
 
-def resolve_principal(service: str, resource_group: str, run_az: RunAz, subscription: str = "") -> str:
+def resolve_principal(service: str, resource_group: str, run_az: RunAz, subscription: str = "", preferred_name: str = "") -> str:
     """Return the single managed identity principal of the service's Container App."""
-    return _resolve_identity(service, resource_group, run_az, subscription)[0]
+    return _resolve_identity(service, resource_group, run_az, subscription, preferred_name)[0]
+
+
+def _preferred_app_name(service: str, environment: Mapping[str, str]) -> str:
+    key = {
+        "frontend": "FRONTEND_APP_NAME",
+        "orchestrator": "ORCHESTRATOR_APP_NAME",
+        "dataingest": "DATA_INGEST_APP_NAME",
+    }.get(service)
+    return (environment.get(key, "") if key else "").strip()
 
 
 def discover_component_identities(
@@ -274,6 +286,7 @@ def discover_component_identities(
         principal, client, resource_id = _resolve_identity(
             service, resource_group, run_az,
             (environment.get("AZURE_SUBSCRIPTION_ID") or environment.get("SUBSCRIPTION_ID") or "").strip(),
+            _preferred_app_name(service, environment),
         )
         if not client:
             arguments = (
@@ -384,6 +397,7 @@ def _assign_planned(
         service: resolve_principal(
             service, resource_group, run_az,
             (environment.get("AZURE_SUBSCRIPTION_ID") or environment.get("SUBSCRIPTION_ID") or "").strip(),
+            _preferred_app_name(service, environment),
         )
         for service in dict.fromkeys(item.service for item in planned)
     }

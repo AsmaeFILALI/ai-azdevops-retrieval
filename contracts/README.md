@@ -1,5 +1,22 @@
 # Shared Agent Landing Zone contracts
 
+## Azure DevOps Markdown index consumer requirements (draft)
+
+[`ado-markdown-index-consumer-v1.json`](ado-markdown-index-consumer-v1.json)
+pins the supplied `ado-markdown-ingestion` `1.0.0-draft` consumer requirements,
+unchanged in meaning. Its historical status/gaps describe the proposal, not
+live deployment readiness. It is not a deployable Search definition and does
+not settle document authorization or establish worker correctness.
+
+[`ado-markdown-index-consumer-v1.json.sha256`](ado-markdown-index-consumer-v1.json.sha256)
+pins the exact LF-encoded bytes. The platform renders its authoritative shared
+RAG index template and validates both the required subset and full explicit
+platform definition before creation and after read-back. Additional platform
+fields are allowed. The isolated Markdown command exports the actual rendered
+index JSON and a SHA-256 sidecar for the ingestion project to pin. See
+[ADR-0024](../docs/adr/ADR-0024-azure-devops-markdown-search-index.md) for
+ownership, rollout and unresolved authorization requirements.
+
 ## Audit event v2 (current)
 
 `audit-event-v2.schema.json` and

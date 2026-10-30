@@ -75,6 +75,7 @@ function git {
 function docker { $global:LASTEXITCODE = 0 }
 function python {
     $call = $args -join ' '
+    if ($call -match 'config.search.schema_selection') { $global:LASTEXITCODE = 0; return }
     if ($call -match 'config.deployment.resource_groups') { $global:LASTEXITCODE = 0; return }
     if ($call -match 'config.deployment.outputs') {
         $global:LASTEXITCODE = if ($env:FAKE_RG_MISSING -eq '1') { 1 } else { 0 }
