@@ -144,6 +144,16 @@ Implementation evidence:
   the next approved provisioning/configuration run. Standard defaults and the
   independent document-push ingestion model remain unchanged.
 
+Source-data projection (2026-11-02): a knowledge source without
+`sourceDataFields` returns only `id, content, title, category, heading_path`.
+The orchestrator builds each citation link from `url` or `filepath`, so it sent
+the model headers with no link, and the model invented `docs.microsoft.com`
+URLs that returned 404. For `SEARCH_RAG_SCHEMA=ado_markdown_v1` the platform
+template now projects `url, filepath, title, category, content, heading_path,
+source_path, source_ref, source_version_id, start_line, end_line`; the standard
+projection is unchanged. A knowledge source created outside the platform
+(for example in the portal) must set the same projection.
+
 ### Isolated schema deployment approval, 2026-10-27
 
 The user approved implementing the supplied `ado-markdown-ingestion`

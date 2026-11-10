@@ -119,6 +119,9 @@ def test_selected_rendering_binds_same_index_and_exact_pinned_schema():
     assert source["name"] == "azdo-markdown-ks"
     assert source["searchIndexParameters"]["searchIndexName"] == NAME
     assert source["searchIndexParameters"]["semanticConfigurationName"] == "semantic-config"
+    projected = {field["name"] for field in source["searchIndexParameters"]["sourceDataFields"]}
+    # Without url/filepath the orchestrator emits no citation link and the model invents one.
+    assert {"url", "filepath", "title", "content", "heading_path", "source_path", "source_version_id"} <= projected
     assert definitions["knowledgeBases"][0]["name"] == "azdo-knowledge-base"
     assert definitions["indexers"] == definitions["datasources"] == definitions["skillsets"] == []
 
@@ -136,6 +139,19 @@ def test_postprovision_accepts_the_trailing_slash_in_published_model_endpoints()
         write = stack.enter_context(patch.object(setup, "call_search_api"))
         setup.execute_setup(definitions, context)
     write.assert_not_called()
+
+
+def test_standard_schema_projection_is_unchanged():
+    environment = Environment(loader=FileSystemLoader(ROOT / "config" / "search"), undefined=StrictUndefined)
+    settings = json.loads(environment.get_template("search.settings.j2").render(
+        **{**SELECTION, "SEARCH_RAG_SCHEMA": "standard"}, RESOURCE_TOKEN="abc",
+        SEARCH_SERVICE_QUERY_ENDPOINT="https://test.search.windows.net",
+    ))
+    context = {**settings, "EMBEDDING_MODEL_INFO": EMBEDDING, "GPT_MODEL_INFO": {}}
+    source = json.loads(environment.get_template("search.j2").render(**context))["knowledgeSources"][0]
+    assert [field["name"] for field in source["searchIndexParameters"]["sourceDataFields"]] == [
+        "metadata_storage_name", "metadata_storage_path", "filepath", "page", "title", "category", "url",
+    ]
 
 
 @pytest.mark.parametrize("existing", [True, False])

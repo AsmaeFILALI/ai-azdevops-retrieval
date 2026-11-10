@@ -259,6 +259,15 @@
           { "name": "title" },
           { "name": "category" },
           { "name": "url" }
+          {% if SEARCH_RAG_SCHEMA | default('standard') == 'ado_markdown_v1' %},
+          { "name": "content" },
+          { "name": "heading_path" },
+          { "name": "source_path" },
+          { "name": "source_ref" },
+          { "name": "source_version_id" },
+          { "name": "start_line" },
+          { "name": "end_line" }
+          {% endif %}
         ],
         "searchFields": [
           { "name": "*" }
