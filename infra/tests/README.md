@@ -81,6 +81,15 @@ assertions, 14 normalization mutation rejections, the original hosted/Storage
 fingerprints, and split/wrong-group operator authorization. No Azure deployment,
 what-if, live RBAC or DNS validation was performed.
 
+The ADR-0025 VPN integration adds a separate exact projection against
+pre-POC develop commit `3ef6190`, compiled with Bicep 0.42.1. It recognizes only
+the eight new default-off VPN inputs, the three VPN/private ACA DNS modules,
+and their precise subnet, layout-validation and route-propagation bindings.
+It runs before scoped-resource-group normalization; the original historical
+fixtures and resource hashes remain unchanged. Mutation checks reject enabling
+VPN by default, removing its gates or layout validation, weakening private ACA
+DNS gating, or attaching a generic NSG to the reserved gateway subnet.
+
 The smallest umbrella CI addition is the single offline-runner command above,
 replacing the standalone resource-group-contract invocation so it is not run
 twice. Keep the existing build/lint steps and install the fixture compiler with

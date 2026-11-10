@@ -1,0 +1,108 @@
+{
+  "contractId": "ado-markdown-ingestion",
+  "contractVersion": "1.0.0-draft",
+  "status": "Proposed consumer requirements; platform implementation pending",
+  "sourceDecision": "ADR-0024: Accelerator-compatible indexing of Azure DevOps Markdown",
+  "artifactKind": "consumer-contract-not-deployable-index",
+  "platformOwnsSchema": true,
+  "exampleIndexName": "kb-sections-v1",
+  "compatibilityRules": {
+    "allowAdditionalPlatformFields": true,
+    "requiredFieldCountIsNotPhysicalIndexFieldCount": true,
+    "compareDeclaredPropertiesAfterNormalizingServiceDefaults": true,
+    "neverCreateOrModifySchemaFromThisArtifact": true,
+    "publishingRequiresPinnedPlatformSchemaAndValidatedTarget": true,
+    "offlineDevelopmentCanUseThisContractWithoutAzure": true,
+    "permissionContractIsSeparateAndUnresolved": true
+  },
+  "requiredFields": [
+    { "name": "id", "type": "Edm.String", "key": true, "searchable": true, "filterable": true, "retrievable": true, "analyzer": "keyword" },
+    { "name": "parent_id", "type": "Edm.String", "searchable": false, "filterable": true, "retrievable": true },
+    { "name": "title", "type": "Edm.String", "searchable": true, "filterable": true, "retrievable": true, "analyzer": "standard.lucene" },
+    { "name": "content", "type": "Edm.String", "searchable": true, "retrievable": true, "analyzer": "standard.lucene" },
+    { "name": "contentVector", "type": "Collection(Edm.Single)", "searchable": true, "retrievable": true, "dimensions": 3072, "vectorSearchProfile": "default" },
+    { "name": "url", "type": "Edm.String", "searchable": false, "retrievable": true },
+    { "name": "filepath", "type": "Edm.String", "searchable": true, "filterable": true, "retrievable": true, "analyzer": "standard" },
+    { "name": "source", "type": "Edm.String", "searchable": false, "filterable": true, "retrievable": true },
+    { "name": "repo_id", "type": "Edm.String", "key": false, "searchable": false, "filterable": true, "sortable": false, "facetable": false, "retrievable": true },
+    { "name": "source_ref", "type": "Edm.String", "key": false, "searchable": false, "filterable": true, "sortable": false, "facetable": false, "retrievable": true },
+    { "name": "source_path", "type": "Edm.String", "key": false, "searchable": false, "filterable": true, "sortable": false, "facetable": false, "retrievable": true },
+    { "name": "heading_path", "type": "Edm.String", "key": false, "searchable": true, "filterable": false, "sortable": false, "facetable": false, "retrievable": true, "analyzer": "standard.lucene" },
+    { "name": "section_id", "type": "Edm.String", "key": false, "searchable": false, "filterable": true, "sortable": false, "facetable": false, "retrievable": true },
+    { "name": "chunk_id", "type": "Edm.Int32", "searchable": false, "retrievable": true },
+    { "name": "part", "type": "Edm.Int32", "key": false, "searchable": false, "filterable": false, "sortable": false, "facetable": false, "retrievable": true },
+    { "name": "part_count", "type": "Edm.Int32", "key": false, "searchable": false, "filterable": false, "sortable": false, "facetable": false, "retrievable": true },
+    { "name": "start_line", "type": "Edm.Int32", "key": false, "searchable": false, "filterable": false, "sortable": false, "facetable": false, "retrievable": true },
+    { "name": "end_line", "type": "Edm.Int32", "key": false, "searchable": false, "filterable": false, "sortable": false, "facetable": false, "retrievable": true },
+    { "name": "source_version_id", "type": "Edm.String", "searchable": false, "filterable": true, "retrievable": true },
+    { "name": "content_checksum_sha256", "type": "Edm.String", "searchable": false, "filterable": true, "retrievable": true },
+    { "name": "ingested_at", "type": "Edm.DateTimeOffset", "searchable": false, "filterable": true, "sortable": true, "retrievable": true },
+    { "name": "ingest_run_id", "type": "Edm.String", "searchable": false, "filterable": true, "retrievable": true },
+    { "name": "pipeline_version", "type": "Edm.String", "key": false, "searchable": false, "filterable": true, "sortable": false, "facetable": false, "retrievable": true }
+  ],
+  "attributeInterpretation": {
+    "omittedRequiredProperties": "not constrained by this consumer contract; inherit pinned platform definition",
+    "omissionDoesNotMeanFalse": true,
+    "newFieldMinimalSortFacetFlags": "explicit defaults for new extensions, not changes to existing bundled fields",
+    "nonIdFieldsCannotBeIndexKey": true,
+    "doNotUseSdkConstructorDefaultsAsEvidenceOfServiceProperties": true
+  },
+  "valueRules": {
+    "source": "azure_devops",
+    "urlEqualsFilepath": true,
+    "citationTarget": "Azure DevOps Git source revision; line/section URL syntax must be validated",
+    "sourcePath": "repository-relative Git path; not a citation URL",
+    "chunkIdStartsAt": 0,
+    "partStartsAt": 1,
+    "sourceLines": "one-based inclusive",
+    "sourceVersionId": "immutable source commit used for this document version",
+    "checksum": "SHA-256 of documented canonical indexed chunk text",
+    "timestamps": "UTC DateTimeOffset",
+    "vectorValidation": "exact dimensions; finite numeric values; never dummy production vectors"
+  },
+  "embeddingRequirements": {
+    "model": "text-embedding-3-large",
+    "deploymentNameBaseline": "text-embedding",
+    "dimensions": 3072,
+    "sameIngestionAndQueryModelRequired": true,
+    "matchingDimensionsAloneIsInsufficient": true,
+    "configurationFingerprintRequired": true,
+    "recordEffectiveModelRevisionWhenAvailable": true,
+    "neverInferAnUnreportedModelRevision": true
+  },
+  "vectorRequirements": {
+    "field": "contentVector",
+    "profile": "default",
+    "algorithmKind": "hnsw",
+    "metric": "cosine",
+    "queryVectorizerRequired": true,
+    "queryVectorizerKind": "azureOpenAI",
+    "doNotSelectVectorsIntoModelContext": true
+  },
+  "semanticRequirements": {
+    "name": "semantic-config",
+    "defaultConfiguration": "semantic-config",
+    "titleField": "title",
+    "contentFields": ["content"],
+    "keywordFields": ["heading_path", "category"],
+    "allSemanticFieldsMustBeSearchableAndRetrievable": true,
+    "category": "existing platform field; populate only when meaningful",
+    "priorityChangesArePlannedNotCurrentlyShipped": true
+  },
+  "platformRegistrationReference": {
+    "RETRIEVAL_BACKEND": "foundry_iq",
+    "FOUNDRY_IQ_PATTERN": "searchIndex",
+    "FOUNDRY_IQ_KNOWLEDGE_SOURCE_KIND": "searchIndex",
+    "SEARCH_RAG_INDEX_NAME": "kb-sections-v1",
+    "DEPLOY_INGESTION_CONTAINER_APP": "false",
+    "FOUNDRY_IQ_CONVERSATION_UPLOAD_ENABLED": "false"
+  },
+  "knownPlatformGaps": [
+    "parent_id filterability must be explicit and validated; the assessed bundled template omits that attribute",
+    "repo_id, source_ref, source_path, heading_path, section_id, part, part_count, start_line, end_line, pipeline_version must be added by the platform",
+    "semantic title and heading priorities require a platform template update",
+    "Foundry IQ source projections need extension if structured section/provenance evidence is required",
+    "the current application does not automatically preserve arbitrary audit fields in normalized retrieval results",
+    "authorization and source-principal mapping require a separate approved contract"
+  ]
+}

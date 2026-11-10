@@ -40,6 +40,8 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateError
 
 from config.search.foundry_iq_mcp_setup import validate_foundry_iq_mcp_settings
 from config.search.private_link_readiness import ensure_native_blob_private_links
+from config.search import markdown_index
+from config.search.schema_selection import MARKDOWN_SCHEMA, SCHEMA_SETTING, public_settings as search_public_settings
 
 # ── Silence verbose logging ─────────────────────────────────────────────────
 for logger_name in (
@@ -217,6 +219,7 @@ def prepare_context_and_render(template_name: str, template_dir: str, label_filt
         return None, {}
 
     context = load_appconfig_settings(ac_client, label_filter=label_filter)
+    context.update(search_public_settings(context))
     
     # ── Extract embedding model info from MODEL_DEPLOYMENTS ──────────────────────────────────────
     def extract_embedding_model_info(ctx: dict) -> dict:
@@ -402,7 +405,7 @@ def call_search_api(endpoint: str, api_version: str, rtype: str, rname: str, met
             if if_none_match:
                 headers["If-None-Match"] = if_none_match
             url = f"{endpoint}/{rtype}/{rname}?api-version={api_version}"
-            resp = getattr(requests, method.lower())(url, headers=headers, json=body)
+            resp = getattr(requests, method.lower())(url, headers=headers, json=body, timeout=30)
             
             if method.lower() == "delete" and resp.status_code == 404:
                 logging.info(f"✅ {rtype.capitalize()} '{rname}' does not exist; skipping deletion.")
@@ -443,6 +446,7 @@ def get_search_resource(
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         },
+        timeout=30,
     )
     if response.status_code == 404:
         return None, None
@@ -942,6 +946,7 @@ def execute_setup(defs: Optional[dict], context: dict):
     if defs is None:
         raise RuntimeError("No search definitions were rendered; aborting Azure Search setup")
     validate_unique_knowledge_source_names(defs)
+    schema = search_public_settings(context)[SCHEMA_SETTING]
     cred = ChainedTokenCredential(AzureCliCredential(),ManagedIdentityCredential())
     indexers = defs.get("indexers", [])
     ds_to_indexers = {}
@@ -964,23 +969,43 @@ def execute_setup(defs: Optional[dict], context: dict):
     # Validate and prepare every index update before deleting any dependent
     # resources. Unsupported schema changes and transient reads fail without
     # disturbing the current knowledge bases, sources, indexers, or documents.
+    standard_definitions = defs
+    markdown_definition = None
+    if schema == MARKDOWN_SCHEMA:
+        name = context["SEARCH_RAG_INDEX_NAME"]
+        matches = [index for index in defs.get("indexes", []) if index["name"] == name]
+        if len(matches) != 1:
+            raise ValueError(f"Expected exactly one Markdown RAG index definition for '{name}'.")
+        embedding = context.get("EMBEDDING_MODEL_INFO") or {}
+        expected = markdown_index.render_index(name, embedding.get("endpoint", ""), embedding.get("deployment_name", ""))
+        markdown_definition = matches[0]
+        markdown_index.validate_platform_index(markdown_definition, expected)
+        standard_definitions = {
+            **defs,
+            "indexes": [index for index in defs.get("indexes", []) if index["name"] != name],
+        }
+
     prepared_index_updates = prepare_index_updates(
-        defs,
+        standard_definitions,
         cred,
         search_endpoint,
         api_version,
     )
 
+    if markdown_definition is not None:
+        markdown_index.ensure_index(search_endpoint, api_version, markdown_definition, cred, apply=True)
+
     # Apply index changes while all dependent resources are still intact. A
     # conditional-write failure leaves the current Search topology untouched.
-    provision_indexes(
-        defs,
-        context,
-        cred,
-        search_endpoint,
-        api_version,
-        prepared_index_updates,
-    )
+    if standard_definitions.get("indexes"):
+        provision_indexes(
+            standard_definitions,
+            context,
+            cred,
+            search_endpoint,
+            api_version,
+            prepared_index_updates,
+        )
 
     # Step 1: Clean up knowledge base resources in correct order (KB -> KS)
     cleanup_knowledge_resources(defs, context, cred, search_endpoint)

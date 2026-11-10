@@ -363,3 +363,50 @@ Write-Output 'destination/exact-ID checks passed'
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "destination/exact-ID checks passed" in result.stdout
+
+
+def test_powershell_discovery_ignores_location_default_and_selects_named_cosmos():
+    pwsh = shutil.which("pwsh")
+    if not pwsh:
+        pytest.skip("PowerShell is unavailable")
+    driver = r"""
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $env:RG_CONSUMER_SOURCE, [ref]$tokens, [ref]$errors)
+if ($errors.Count) { throw 'Hook syntax failed' }
+$node = $ast.FindAll({
+    param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq '_resolveResource'
+}, $true)[0]
+Invoke-Expression $node.Extent.Text
+$resourceGroup = 'rg-app'
+$subscriptionId = 'selected-sub'
+function az {
+    if ($args[0] -ne 'resource' -or $args[1] -ne 'list') { throw 'Unexpected operation' }
+    if ('--location=' -notin $args) {
+        '[]'
+    } elseif ('Microsoft.Storage/storageAccounts' -in $args) {
+        '[{"id":"/subscriptions/selected-sub/resourceGroups/rg-app/providers/Microsoft.Storage/storageAccounts/storage-east","name":"storage-east"}]'
+    } else {
+        '[{"id":"/subscriptions/selected-sub/resourceGroups/rg-app/providers/Microsoft.DocumentDB/databaseAccounts/failed-east","name":"failed-east"},{"id":"/subscriptions/selected-sub/resourceGroups/rg-app/providers/Microsoft.DocumentDB/databaseAccounts/replacement-central","name":"replacement-central"}]'
+    }
+    $global:LASTEXITCODE = 0
+}
+if ((_resolveResource -Type 'Microsoft.Storage/storageAccounts') -ne 'storage-east') {
+    throw 'CLI location default hid the East storage account'
+}
+if ((_resolveResource -Type 'Microsoft.DocumentDB/databaseAccounts' -PreferredName 'replacement-central') -ne 'replacement-central') {
+    throw 'Failed account was selected instead of the configured replacement'
+}
+Write-Output 'cross-region discovery checks passed'
+"""
+    source = Path(__file__).resolve().parents[1] / "scripts" / "postProvision.ps1"
+    result = subprocess.run(
+        [pwsh, "-NoProfile", "-NonInteractive", "-Command", driver],
+        env={**os.environ, "RG_CONSUMER_SOURCE": str(source)},
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "cross-region discovery checks passed" in result.stdout

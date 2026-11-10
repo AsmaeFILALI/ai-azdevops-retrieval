@@ -37,7 +37,7 @@ module nsgsM 'network-security-group.bicep' = [
 ]
 
 // Reserved subnets must not inherit a generic NSG; explicit service NSGs still win.
-var invalidNsgSubnets = ['AzureFirewallSubnet','AppGatewaySubnet','AzureBastionSubnet']
+var invalidNsgSubnets = ['AzureFirewallSubnet','AppGatewaySubnet','AzureBastionSubnet','GatewaySubnet']
 
 @batchSize(1)
 module subnetsM 'subnet.bicep' = [

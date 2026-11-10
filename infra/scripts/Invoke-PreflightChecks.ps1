@@ -469,8 +469,14 @@ function Test-Topology {
     }
 
     $deployJump = Resolve-DeployJumpbox $P
+    $deployVpn = Resolve-DeployFlag -P $P -Key 'deployVpnGateway' -Default $false
     $allowedIps = Get-ArrayValue $P['allowedIpRanges']
-    if ($netIso -and -not $deployJump -and $allowedIps.Count -eq 0) {
+    if ($netIso -and $deployVpn) {
+        Add-Finding -Severity INFO -Code 'ISO_VPN_SELECTED' `
+            -Message 'Point-to-site VPN selected. Private access still requires client profile import, sign-in, routes, and DNS.' `
+            -Hint 'Verify private DNS and HTTPS from the connected host before post-provision configuration.'
+    }
+    if ($netIso -and -not $deployJump -and -not $deployVpn -and $allowedIps.Count -eq 0) {
         Add-Finding -Severity WARN -Code 'ISO_NO_INGRESS' `
             -Message "networkIsolation=true but no jumpbox/VM is deployed and allowedIpRanges is empty." `
             -Hint "You will not have any way to reach the workload after deployment. Set DEPLOY_JUMPBOX=true, ALLOWED_IP_RANGES=<your-ip>, or plan to use an existing hub jumpbox via EXISTING_JUMPBOX_RESOURCE_ID."

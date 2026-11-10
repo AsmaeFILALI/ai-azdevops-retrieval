@@ -354,6 +354,17 @@ Test-Topology -P @{
 }
 Assert-True 'WARN ISO_NO_INGRESS raised' (Test-FindingPresent 'ISO_NO_INGRESS')
 
+Reset-Findings
+Test-Topology -P @{
+    networkIsolation = $true
+    deployVpnGateway = $true
+    deployJumpbox = $false
+    deployVM = $false
+    allowedIpRanges = @()
+}
+Assert-True 'VPN selection is reported with the client connectivity gate' (Test-FindingPresent 'ISO_VPN_SELECTED')
+Assert-True 'VPN selection does not incorrectly report no ingress path' (Test-FindingAbsent 'ISO_NO_INGRESS')
+
 # --------------------------------------------------------------------------
 Write-Host 'Hosted agent: disabled contract is inert' -ForegroundColor Cyan
 Reset-Findings

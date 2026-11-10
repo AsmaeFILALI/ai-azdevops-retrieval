@@ -78,6 +78,9 @@ function Invoke-ScopedProjection {
 function ConvertTo-LegacyResourceGroupGraph {
     param([Parameter(Mandatory)] $Template)
     $copy = ConvertTo-Json -InputObject $Template -Depth 100 -Compress | ConvertFrom-Json -AsHashtable -Depth 100
+    $networkFixture = Get-Content (Join-Path $PSScriptRoot 'fixtures\vpn-private-networking-normalization.json') -Raw |
+        ConvertFrom-Json -AsHashtable -Depth 100
+    $copy = Invoke-ScopedProjection $copy $networkFixture.projection
     $fixture = Get-Content (Join-Path $PSScriptRoot 'fixtures\scoped-resource-groups-normalization.json') -Raw |
         ConvertFrom-Json -AsHashtable -Depth 100
     return Invoke-ScopedProjection $copy $fixture.projection

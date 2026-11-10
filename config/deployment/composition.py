@@ -25,6 +25,7 @@ from config.panel.settings import (
     OWNER_INDEX_CONTAINER_NAME,
     public_settings as panel_public_settings,
 )
+from config.search.schema_selection import public_settings as search_public_settings
 
 
 APP_CONFIG_LABEL = "agent-lz"
@@ -678,6 +679,7 @@ def compose_parameters(
     mode = resolve_mode(environment)
     deploy_ingestion = resolve_ingestion_selection(environment)
     validate_ingestion_selection(environment, deploy_ingestion)
+    search_settings = search_public_settings(environment)
     hosted = mode is not DeploymentMode.CLASSIC
     prepare_hosted = requires_hosted_foundation(
         environment, hosted_orchestration=hosted
@@ -850,11 +852,7 @@ def compose_parameters(
     parameters["additionalAppConfigurationSettings"] = {
         "value": [
             _setting(DEPLOY_INGESTION_CONTAINER_APP, str(deploy_ingestion).lower()),
-            *(
-                [_setting("SEARCH_RAG_INDEX_NAME", environment["SEARCH_RAG_INDEX_NAME"].strip())]
-                if (environment.get("SEARCH_RAG_INDEX_NAME") or "").strip()
-                else []
-            ),
+            *[_setting(name, value) for name, value in search_settings.items()],
             _setting(
                 "DEPLOY_HOSTED_AGENT_ORCHESTRATION",
                 str(runtime_hosted).lower(),

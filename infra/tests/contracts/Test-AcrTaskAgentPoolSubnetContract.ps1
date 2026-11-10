@@ -301,8 +301,8 @@ try {
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', parameters('subscriptionId'), parameters('resourceGroupName')), 'Microsoft.Resources/deployments', format('{0}{1}-{2}', parameters('prefix'), parameters('vnetName'), parameters('subnets')[range(0, length(parameters('subnets')))[copyIndex()]].name))]"
     )
     $excluded = @($subnets.properties.template.variables.invalidNsgSubnets)
-    Test-Equal '#168 generic NSG exclusions include the reserved Bastion subnet' `
-        $excluded @('AzureFirewallSubnet', 'AppGatewaySubnet', 'AzureBastionSubnet')
+    Test-Equal '#168/ADR-0025 generic NSG exclusions include reserved Bastion and VPN gateway subnets' `
+        $excluded @('AzureFirewallSubnet', 'AppGatewaySubnet', 'AzureBastionSubnet', 'GatewaySubnet')
     $selection = @'
 [if(not(empty(coalesce(tryGet(parameters('subnets')[range(0, length(parameters('subnets')))[copyIndex()]], 'networkSecurityGroupResourceId'), ''))), createObject('value', string(parameters('subnets')[range(0, length(parameters('subnets')))[copyIndex()]].networkSecurityGroupResourceId)), if(and(parameters('deployNsgs'), not(contains(variables('invalidNsgSubnets'), parameters('subnets')[range(0, length(parameters('subnets')))[copyIndex()]].name))), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', parameters('subscriptionId'), parameters('resourceGroupName')), 'Microsoft.Resources/deployments', format('{0}{1}-{2}', parameters('prefix'), parameters('vnetName'), parameters('subnets')[range(0, length(parameters('subnets')))[copyIndex()]].name)), '2025-04-01').outputs.id.value), createObject('value', '')))]
 '@
