@@ -31,6 +31,11 @@ try {
     }
 
     $mutations = @(
+        @{ Name = 'VPN enabled by default'; Change = { param($t) $t.parameters.deployVpnGateway.defaultValue = $true } },
+        @{ Name = 'VPN module gate removed'; Change = { param($t) $t.resources.pointToSiteVpn.condition = $true } },
+        @{ Name = 'private ACA DNS gate removed'; Change = { param($t) $t.resources.containerAppsPrivateDns.condition = $true } },
+        @{ Name = 'VPN layout validation disabled'; Change = { param($t) $t.resources.vpnLayoutValidation.condition = $false } },
+        @{ Name = 'gateway generic NSG exemption removed'; Change = { param($t) $t.resources.virtualNetworkSubnets.properties.template.variables.invalidNsgSubnets = @('AzureFirewallSubnet', 'AppGatewaySubnet', 'AzureBastionSubnet') } },
         @{ Name = 'wrong Foundry scope'; Change = { param($t) $t.resources.aiFoundry.resourceGroup = 'wrong-group' } },
         @{ Name = 'wrong network scope'; Change = { param($t) $t.resources.virtualNetwork.resourceGroup = 'wrong-group' } },
         @{ Name = 'grounding Storage moved to app'; Change = { param($t) $t.resources.storageAccount.resourceGroup = '[resourceGroup().name]' } },
