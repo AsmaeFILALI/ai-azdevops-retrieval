@@ -3,6 +3,8 @@
 import json
 import hashlib
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -13,10 +15,39 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_root_and_tracked_seed_are_the_same_portable_inputs():
-    root = json.loads((ROOT / "main.parameters.json").read_text())
-    seed = json.loads((ROOT / "infra" / "main.parameters.json").read_text())
+    root = json.loads((ROOT / "main.parameters.json").read_text(encoding="utf-8"))
+    location = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True, encoding="utf-8", check=False,
+    )
+    if location.returncode or Path(location.stdout.strip()).resolve() != ROOT.resolve():
+        pytest.skip("Committed seed comparison requires this checkout's Git metadata.")
+    seed = json.loads(subprocess.check_output(
+        ["git", "-C", str(ROOT), "show", "HEAD:infra/main.parameters.json"],
+        text=True, encoding="utf-8",
+    ))
     assert root == seed
     assert root["parameters"]["dbAccountName"]["value"] == "${COSMOS_ACCOUNT_NAME=}"
+
+
+def test_seed_contract_survives_normal_preprovision_generation(tmp_path, monkeypatch):
+    source = json.loads((ROOT / "main.parameters.json").read_text(encoding="utf-8"))
+    profile = json.loads((ROOT / "samples/customer-poc/azd-env.example.json").read_text(encoding="utf-8"))
+    checkout = tmp_path / "source"
+    (checkout / "infra").mkdir(parents=True)
+    for relative in ("main.parameters.json", "infra/main.parameters.json"):
+        (checkout / relative).write_text(json.dumps(source), encoding="utf-8")
+    for args in (
+        ["init", "--quiet"], ["add", "."],
+        ["-c", "core.hooksPath=", "-c", "user.name=Offline Test",
+         "-c", "user.email=offline@example.invalid", "commit", "--quiet", "-m", "seed fixture"],
+    ):
+        subprocess.run(["git", "-C", str(checkout), *args], check=True, capture_output=True)
+    generated = compose_parameters(source, profile["inputs"] | profile["bootstrap"])
+    assert generated != source
+    (checkout / "infra/main.parameters.json").write_text(json.dumps(generated), encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", checkout)
+    test_root_and_tracked_seed_are_the_same_portable_inputs()
 
 
 def test_pinned_consumer_contract_uses_committed_lf_bytes():

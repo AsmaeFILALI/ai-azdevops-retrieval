@@ -85,6 +85,29 @@ central AI Landing Zones site, with a short README entry here.
 
 ## Fitness functions and review triggers
 
+### PR #2 review remediation
+
+- Record genuine `upstream` repo/tag/commit metadata for each fork. Verify it is
+  real ancestry of the selected source. Compatibility checks use that version,
+  while source fetching still uses the explicit branch and exact current commit.
+  Do not attach an old release locator tag to new source.
+- Exclude root/nested environment files, local config/state, uploads and logs
+  from both component Docker contexts. Git cleanliness alone does not establish
+  context safety. Add explicit exclusion contracts and synthetic COPY/export
+  tests; the latter require a healthy Docker engine.
+- Bound overlong citation buffering without emitting a usable Markdown opening
+  delimiter. Preserve observation/off modes and test actual renderer behavior,
+  chunk splits, image syntax and history extraction.
+- Compare portability against the committed Git seed, not the intentionally
+  generated working parameters. Reproduce ordinary pre-provision generation in
+  a separate Git fixture.
+- Link customer instructions to immutable accessible source in the central
+  documentation fork until the official site publishes the page.
+
+The new source fixes pass regression/lint checks. Docker engine HTTP 500/readiness
+timeouts prevent fresh layer-export/image verification here; that limitation is
+explicitly reported, not converted into a passing integration check.
+
 The clean-source rehearsal exposed a pre-existing checksum mismatch: Git
 stores the consumer contract as LF under `.gitattributes`, but the original
 sidecar described a CRLF working copy. Correct the sidecar to the exact

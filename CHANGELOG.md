@@ -8,6 +8,15 @@
   `app-definition.json` with the same commits. No new upstream version tags
   are implied; bundled ingestion and foundation provenance are unchanged.
 
+### Fixed
+- Preserve genuine upstream release provenance separately from fork source
+  locator tags so Search/runtime compatibility checks still enforce their
+  minimum version. Include Search contracts in deployment CI.
+- Select follow-up component fixes that exclude ignored local configuration
+  from Docker contexts and neutralize oversized streamed citation links.
+- Compare the committed infrastructure seed, not its intentionally generated
+  working copy, with portability inputs; cover normal pre-provision generation.
+
 ## [v4.3.5] - 2026-10-26
 
 ### Changed

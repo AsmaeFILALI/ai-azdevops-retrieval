@@ -21,7 +21,7 @@ to that guidance and to sanitized, versioned examples.
 
 The user subsequently requested implementation on 2026-11-10. Source
 portability work and coordinated documentation are committed locally. No Azure
-resource changes, component publication, Git tags,
+resource changes, release tags,
 GitHub releases, repository visibility or customer access changes are included.
 
 ### Implementation decisions and remaining gates
@@ -48,8 +48,9 @@ GitHub releases, repository visibility or customer access changes are included.
   source publication and live ingestion/recovery remain
   outstanding gates. No workload VPN route is currently available; registry
   digest lookup could not be completed. Do not infer success from image tags.
-- Central site and worker handoff edits are coordinated local commits, not
-  published customer documentation. The unrelated `golden-qa.jsonl` remains
+- The customer guide is published as immutable source in the central docs fork,
+  linked from README; official-site publication remains pending. Worker handoff
+  source integration is separate. The unrelated `golden-qa.jsonl` remains
   untouched and excluded.
 
 Offline evidence is recorded under ignored `.local/customer-handover/`:
@@ -88,7 +89,8 @@ knowledge-source promotion, UI/orchestrator source, or query-time access control
 
 #### Current repository: Landing Zone (`ai-azdevops-retrieval`)
 
-Current source is `feature/customer-deployment-handover` at `686adf2`.
+Current source is on `feature/customer-deployment-handover`; use Git HEAD and
+the manifest for the current source/pin combination.
 The portable profile, state parameters, strategy publisher, handoff exporter,
 clean-source guards and regressions are already implemented and committed.
 
@@ -107,7 +109,7 @@ retrieval bindings and final integration evidence. It does not absorb the worker
 implementation into this repository.
 
 LZ-02 is complete at the source-selection boundary: public fork branches resolve
-UI `132f70b` and orchestrator `7220406`, and `manifest.json`/`app-definition.json`
+UI `7ff09f4` and orchestrator `a825e0b`, and `manifest.json`/`app-definition.json`
 select the same exact full commits. Fresh clones and pin/composition contracts
 pass. No registry image or Azure application was updated.
 
@@ -115,9 +117,9 @@ pass. No registry image or Azure application was updated.
 
 | Owning repository | Outstanding dependency | Consumer |
 | --- | --- | --- |
-| `agent-app-ui` | Source publication completed: `AsmaeFILALI/agent-app-ui`, `feature/customer-build-feeds` (`132f70b`). A real component release/tag remains optional separately approved promotion work. | LZ-02 completed; LZ-04 consumes the pin |
-| `agent-app-orchestrator` | Source publication completed: `AsmaeFILALI/agent-app-orchestrator`, `feature/citation-guard` (`7220406`). The documented retrieval/citation limitations still apply. | LZ-02 completed; LZ-04 consumes the pin |
-| Central `Azure/AI-Landing-Zones` docs | Publish the coordinated `feature/clarify-agent-foundry-location` source (`1f6c8dd`) and verify customer-visible links match the selected source combination. The strict build already passes. | LZ-06, WRK-04 |
+| `agent-app-ui` | Source publication completed: `AsmaeFILALI/agent-app-ui`, `feature/customer-build-feeds` (`7ff09f4`). A real component release/tag remains optional separately approved promotion work. | LZ-02 completed; LZ-04 consumes the pin |
+| `agent-app-orchestrator` | Source publication completed: `AsmaeFILALI/agent-app-orchestrator`, `feature/citation-guard` (`a825e0b`). The documented retrieval/citation limitations still apply. | LZ-02 completed; LZ-04 consumes the pin |
+| Central `Azure/AI-Landing-Zones` docs | Immutable customer guide source is published in `AsmaeFILALI/AI-Landing-Zones` at `4fac1bcc7b674ca45d5517a209b78f5ff063a608`, and README links directly to it. Official-site publication is separate. | LZ-06, WRK-04 can use the accessible source now |
 
 Suggested coordination order:
 
@@ -503,6 +505,27 @@ document-level authorization.
   `.local/customer-handover/clean-build-20261111/results.json`.
 
 ### Explicitly incomplete/approval-gated tasks
+
+PR #2 review fixes, 2026-11-11:
+
+- Keep branch source locators separate from genuine upstream release provenance;
+  verify the ancestor commits and retain the minimum runtime compatibility gate.
+- Exclude ignored local environment/config/state/cache/upload/log inputs from
+  both selected component Docker contexts. Explicit exclusion contracts pass;
+  synthetic Docker export tests are skipped because this engine is unhealthy.
+- Oversized citation/link/image candidates are rendered as literal text rather
+  than active Markdown. Actual renderer and split-stream regressions pass.
+- The seed contract now reads committed Git content and passes after legitimate
+  pre-provision composition regenerates its working copy.
+- Deployment CI includes `config/search/tests`, which reproduced the prior
+  empty-tag regression.
+- Updated full affected platform/Search suite: **419 passed, 353 subtests**.
+- Updated orchestrator suite: **261 passed, 1 Docker integration skip**; UI
+  context/feed checks pass with its Docker integration check skipped explicitly.
+- New Bicep metadata builds/lints at **4,796,639 bytes**; the original graph
+  projection and all **20 mutation checks** pass.
+- The accessible immutable customer runbook source replaces README's 404-only
+  site link. A new customer Azure deployment has not been performed.
 
 Source-pin adoption verification on 2026-11-11:
 

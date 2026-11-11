@@ -37,7 +37,7 @@ class IntegrationPinTests(unittest.TestCase):
             (
                 "https://github.com/AsmaeFILALI/agent-app-orchestrator.git",
                 "feature/citation-guard",
-                "72204060a055ed6081d0cc4d08d221275e907d1f",
+                "a825e0bd2d0a7930da55a5ef9f7d20e2d4b036e2",
             ),
             (
                 components["agent-app-orchestrator"]["repo"],
@@ -56,7 +56,7 @@ class IntegrationPinTests(unittest.TestCase):
             (
                 "https://github.com/AsmaeFILALI/agent-app-ui.git",
                 "feature/customer-build-feeds",
-                "132f70bf862a482433faf4fccbdbf09cf8f1e12a",
+                "7ff09f49325d91018b2d443f993edf9b4cfd042d",
             ),
             (
                 components["agent-app-ui"]["repo"],
@@ -69,6 +69,22 @@ class IntegrationPinTests(unittest.TestCase):
         for component, name in (("agent-app-ui", "ui"), ("agent-app-orchestrator", "orchestrator")):
             self.assertEqual("", components[component]["tag"])
             self.assertEqual(components[component]["commit"], declared[name]["source"]["commit"])
+        self.assertEqual(
+            {
+                "repo": "https://github.com/Azure/agent-app-ui.git",
+                "tag": "v3.3.0",
+                "commit": "858ed4205d866b7bfbff43ca9ed20ab812baa24e",
+            },
+            components["agent-app-ui"]["upstream"],
+        )
+        self.assertEqual(
+            {
+                "repo": "https://github.com/Azure/agent-app-orchestrator.git",
+                "tag": "v5.2.1",
+                "commit": "27f952fcf8d48a2ba6267c237ea6bea8361fedd2",
+            },
+            components["agent-app-orchestrator"]["upstream"],
+        )
 
     def test_customer_source_refs_are_verified_before_child_build(self) -> None:
         for name, branch, expected, boundary in (
@@ -78,6 +94,15 @@ class IntegrationPinTests(unittest.TestCase):
             content = (ROOT / "scripts" / name).read_text(encoding="utf-8-sig")
             self.assertIn(branch, content)
             self.assertLess(content.index(expected), content.index(boundary, content.index(expected)))
+
+    def test_deployment_ci_includes_search_runtime_contracts(self) -> None:
+        import yaml
+
+        workflow = yaml.safe_load((ROOT / ".github/workflows/infra-validate.yml").read_text(encoding="utf-8"))
+        steps = workflow["jobs"]["deployment-contracts"]["steps"]
+        runner = next(step["run"] for step in steps if step.get("name") == "Test deployment contracts")
+        self.assertIn("tests", runner.split())
+        self.assertIn("config/search/tests", runner.split())
 
     def test_infra_is_in_repository_source_without_submodule_pin(self) -> None:
         self.assertFalse((ROOT / ".gitmodules").exists())

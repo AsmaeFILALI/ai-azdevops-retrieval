@@ -47,7 +47,7 @@ reuse depend on deployment settings. Select an image to open the full-resolution
 
 For the private Azure DevOps Markdown POC, start with the reviewed
 [customer input examples](samples/customer-poc/) and the
-[customer deployment runbook](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/azure-devops-markdown-poc/).
+[customer deployment runbook](https://github.com/AsmaeFILALI/AI-Landing-Zones/blob/4fac1bcc7b674ca45d5517a209b78f5ff063a608/docs/agent-landing-zone/azure-devops-markdown-poc.md).
 Use the platform revision supplied with the handover, not an unreviewed default
 branch. The separate Markdown worker is not the bundled ingestion component.
 
@@ -56,6 +56,9 @@ customer forks through `manifest.json`: a feature-branch ref locates each source
 and its full commit pin is verified before building. These are source candidates,
 not new upstream release tags. Moving a selected branch to another commit fails
 the pin check until the references are deliberately updated.
+The runbook link is pinned to accessible central-documentation source while
+official-site publication is pending. Component `upstream` metadata records
+the genuine release provenance separately from the branch used to fetch fixes.
 
 ## Components
 
