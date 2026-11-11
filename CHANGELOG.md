@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- Select the clean-built customer UI and orchestrator fixes from public forks
+  using feature-branch references plus exact full commit verification. Align
+  `app-definition.json` with the same commits. No new upstream version tags
+  are implied; bundled ingestion and foundation provenance are unchanged.
+
 ## [v4.3.5] - 2026-10-26
 
 ### Changed

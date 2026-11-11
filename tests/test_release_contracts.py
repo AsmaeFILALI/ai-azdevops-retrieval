@@ -34,9 +34,14 @@ class IntegrationPinTests(unittest.TestCase):
             manifest["infra"]["source"],
         )
         self.assertEqual(
-            ("v5.2.1", "27f952fcf8d48a2ba6267c237ea6bea8361fedd2"),
             (
-                components["agent-app-orchestrator"]["tag"],
+                "https://github.com/AsmaeFILALI/agent-app-orchestrator.git",
+                "feature/citation-guard",
+                "72204060a055ed6081d0cc4d08d221275e907d1f",
+            ),
+            (
+                components["agent-app-orchestrator"]["repo"],
+                components["agent-app-orchestrator"]["branch"],
                 components["agent-app-orchestrator"]["commit"],
             ),
         )
@@ -48,12 +53,31 @@ class IntegrationPinTests(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            ("v3.3.0", "858ed4205d866b7bfbff43ca9ed20ab812baa24e"),
             (
-                components["agent-app-ui"]["tag"],
+                "https://github.com/AsmaeFILALI/agent-app-ui.git",
+                "feature/customer-build-feeds",
+                "132f70bf862a482433faf4fccbdbf09cf8f1e12a",
+            ),
+            (
+                components["agent-app-ui"]["repo"],
+                components["agent-app-ui"]["branch"],
                 components["agent-app-ui"]["commit"],
             ),
         )
+        definition = json.loads((ROOT / "app-definition.json").read_text(encoding="utf-8"))
+        declared = {item["name"]: item for item in definition["components"]}
+        for component, name in (("agent-app-ui", "ui"), ("agent-app-orchestrator", "orchestrator")):
+            self.assertEqual("", components[component]["tag"])
+            self.assertEqual(components[component]["commit"], declared[name]["source"]["commit"])
+
+    def test_customer_source_refs_are_verified_before_child_build(self) -> None:
+        for name, branch, expected, boundary in (
+            ("preDeploy.ps1", "$desiredBranch = $c.branch", "$actualCommit -ne $expectedCommit", "# Copy shared azd env"),
+            ("preDeploy.sh", 'c_branch="$(printf', 'if [ "$actual_commit" != "$expected_commit" ]', 'copy_dot_azure "$dot_azure" "$target"'),
+        ):
+            content = (ROOT / "scripts" / name).read_text(encoding="utf-8-sig")
+            self.assertIn(branch, content)
+            self.assertLess(content.index(expected), content.index(boundary, content.index(expected)))
 
     def test_infra_is_in_repository_source_without_submodule_pin(self) -> None:
         self.assertFalse((ROOT / ".gitmodules").exists())

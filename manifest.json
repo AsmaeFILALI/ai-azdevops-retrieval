@@ -11,15 +11,17 @@
   "components": [
     {
       "name": "agent-app-ui",
-      "repo": "https://github.com/Azure/agent-app-ui.git",
-      "tag": "v3.3.0",
-      "commit": "858ed4205d866b7bfbff43ca9ed20ab812baa24e"
+      "repo": "https://github.com/AsmaeFILALI/agent-app-ui.git",
+      "tag": "",
+      "branch": "feature/customer-build-feeds",
+      "commit": "132f70bf862a482433faf4fccbdbf09cf8f1e12a"
     },
     {
       "name": "agent-app-orchestrator",
-      "repo": "https://github.com/Azure/agent-app-orchestrator.git",
-      "tag": "v5.2.1",
-      "commit": "27f952fcf8d48a2ba6267c237ea6bea8361fedd2"
+      "repo": "https://github.com/AsmaeFILALI/agent-app-orchestrator.git",
+      "tag": "",
+      "branch": "feature/citation-guard",
+      "commit": "72204060a055ed6081d0cc4d08d221275e907d1f"
     },
     {
       "name": "agent-app-ingestion",

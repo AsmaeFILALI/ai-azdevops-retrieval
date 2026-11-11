@@ -44,9 +44,31 @@ root/seed parity, paired clean-source guard and negative handoff tests.
   endpoint and API-version consistency. Its JSON is an allowlist, not a dump of
   supplied deployment data. Offline validation cannot prove current Azure state,
   permissions, source admission or non-serving status.
-- Retain current component pins. Dirty image tags cannot establish provenance;
-  approve separate component fixes before changing pins or promising identical
-  experimental runtime behavior.
+- Publish approved tested component commits before adopting them in matching
+  `manifest.json` and `app-definition.json` references. Dirty image tags cannot
+  establish provenance or be used as evidence of deployed behavior.
+
+### Customer source adoption, 2026-11-11
+
+The customer forks now expose UI `132f70bf862a482433faf4fccbdbf09cf8f1e12a`
+on `feature/customer-build-feeds` and orchestrator
+`72204060a055ed6081d0cc4d08d221275e907d1f` on `feature/citation-guard`,
+under `AsmaeFILALI/agent-app-ui` and `AsmaeFILALI/agent-app-orchestrator`.
+Both commits passed clean Linux/amd64 builds, dependency checks and offline
+smoke checks. The upstream bundled ingestion pin and foundation provenance
+remain unchanged.
+
+Use the existing branch-ref plus expected-full-commit deployment path; leave
+component tags empty rather than attaching old upstream version tags to new
+source. Branch movement fails closed at the commit verification. This avoids
+inventing a release and needs no new source resolver. Formal release adoption
+must choose approved real tags and update the combination deliberately.
+
+Only the incorporated-normalization fixture's expected loaded manifest metadata
+is updated. Original historical resource/output fingerprints and before-values
+remain unchanged; the compiled loaded manifest still must match the root
+manifest exactly. No Azure resource or application deployment follows from
+source pin adoption.
 
 ## Adoption, recovery and documentation
 

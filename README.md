@@ -51,6 +51,12 @@ For the private Azure DevOps Markdown POC, start with the reviewed
 Use the platform revision supplied with the handover, not an unreviewed default
 branch. The separate Markdown worker is not the bundled ingestion component.
 
+This customer branch selects the tested UI/orchestrator fixes from public
+customer forks through `manifest.json`: a feature-branch ref locates each source,
+and its full commit pin is verified before building. These are source candidates,
+not new upstream release tags. Moving a selected branch to another commit fails
+the pin check until the references are deliberately updated.
+
 ## Components
 
 Component versions for this release are pinned in [manifest.json](manifest.json).

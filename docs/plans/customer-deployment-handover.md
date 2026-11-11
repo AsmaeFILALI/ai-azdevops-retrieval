@@ -20,20 +20,21 @@ documentation. Customer/operator instructions belong in the central
 to that guidance and to sanitized, versioned examples.
 
 The user subsequently requested implementation on 2026-11-10. Source
-portability work and coordinated documentation are now in progress on the
-planning branch. No Azure resource changes, component publication, Git tags,
+portability work and coordinated documentation are committed locally. No Azure
+resource changes, component publication, Git tags,
 GitHub releases, repository visibility or customer access changes are included.
 
 ### Implementation decisions and remaining gates
 
-- Deliver the existing clean pinned runtime baseline. Preserve but exclude
-  uncommitted UI/orchestrator packaging/citation experiments until separately
-  reviewed, validated and published. No new component version is fabricated.
+- The customer branch now selects the clean-built UI/orchestrator candidate
+  commits from public `AsmaeFILALI` forks. Manifest branch refs locate the source
+  and full commit pins must match before building. App-definition commits agree;
+  no new release version/tag is fabricated.
 - Subsequent user approval on 2026-11-10 authorizes local component and
   coordinated handover commits. Focused runtime tests and credential-free feed
-  checks are verified; publication, component pin changes, full image builds
-  and deployment remain separate gates. The committed runtime candidate is
-  therefore not yet part of the platform's selected upstream baseline.
+  checks are verified. The component feature branches have now been published
+  and selected in the working platform manifest; authenticated deployment,
+  platform PR/publication and image publication remain separate operations.
 - Main Cosmos naming is now portable; the existing POC's exact account was
   persisted to `COSMOS_ACCOUNT_NAME` in its ignored azd environment first.
 - The tracked fresh-clone parameter seed is synchronized with root inputs.
@@ -43,11 +44,11 @@ GitHub releases, repository visibility or customer access changes are included.
   verification remains enabled.
 - The offline handoff refuses contradictory non-serving declarations against
   the recorded main binding. Current live serving status still needs validation.
-- Customer context/access, registry image digests, clean component image builds,
-  authenticated local startup, publication and live ingestion/recovery remain
+- Customer context/access, published registry digests, authenticated startup,
+  source publication and live ingestion/recovery remain
   outstanding gates. No workload VPN route is currently available; registry
   digest lookup could not be completed. Do not infer success from image tags.
-- Central site and worker edits are coordinated local source changes, not
+- Central site and worker handoff edits are coordinated local commits, not
   published customer documentation. The unrelated `golden-qa.jsonl` remains
   untouched and excluded.
 
@@ -55,6 +56,80 @@ Offline evidence is recorded under ignored `.local/customer-handover/`:
 source decisions, image metadata limitations, source hashes and clean-snapshot
 results, test logs, strict documentation build and delivery status. This path
 is working evidence, not something to copy wholesale to the customer.
+
+### Remaining todos by repository, updated 2026-11-11
+
+These are ownership-specific views of the original T001-T027 tasks, not a second
+implementation backlog. Completed source/configuration/build work is excluded.
+The existing network addresses remain unchanged. No item below authorizes a
+push, merge, release, permission change, document publication or paid deployment.
+
+#### Worker repository: `injection-pipeline`
+
+Current source is `generalisation` at `335df34`. The separately committed
+handoff guidance is on `feature/platform-handover-docs` at `868ad3a`; it is not
+yet part of `generalisation`. The prospective combination was tested in an
+isolated snapshot without merging or changing either worktree.
+
+Paths in this table are relative to the **worker repository**, not this platform.
+
+| ID | Remaining todo | Dependency / done condition | Original tasks |
+| --- | --- | --- | --- |
+| WRK-01 | Combine the reviewed `generalisation` changes with `feature/platform-handover-docs`, preserving both sets of `docs/`, `examples/` and identity-script changes. | Isolated combination already passes 79 tests; make the actual reviewed integration and validate that exact resulting worker revision. | T003, T027 |
+| WRK-02 | Publish the integrated worker source through the customer's approved repository/PR flow and select its immutable delivery revision. | After WRK-01 and repository-access approval; protect the publishing-code branch and pin the template ref plus full commit in `examples/content-repo/azure-pipelines.yml`. Tags require explicit approval. | T003, T027 |
+| WRK-03 | Prepare the worker's WIF service connection, explicit service-principal IDs, protected pipeline environment, repository checkout permissions and approved private agent pool. | Customer administrator approval. Supply the actual writer object ID to LZ-04 before state-store deployment. After networking exists, verify the publishing agent's private routing/DNS; a laptop VPN is insufficient. Use `scripts/New-IngestionIdentity.ps1` in preview first, then apply only approved scopes. | T003, T025, T026 |
+| WRK-04 | Fill customer `config/<name>/pipeline-source.toml`, `publishing-config.toml`, exact schema/hash and reviewed admission inputs. | Requires LZ-05 outputs and WRK-03 identity. Set approved repository/ref/path rules and API versions; retain `enablePublishing=false` initially. Do not copy our service names or infer admission from the export. | T003, T026, T027 |
+| WRK-05 | Validate the actual customer Azure DevOps template/job using the pinned worker, approved pool and exact immutable source commit. | Requires WRK-02-WRK-04. Record successful offline validation and checkout/toolchain/approval behavior without enabling publication. Existing local tests do not prove Azure DevOps execution. | T024, T026 |
+| WRK-06 | After separate source/data approval, run first publication, no-change rerun and interrupted-run recovery on an explicitly admitted target. | Requires WRK-05 and LZ-05. Verify documents, checkpoints, journals/lease behavior and no unnecessary embeddings/writes. A test waiver is valid only for a currently non-serving target. Supply results to LZ-06. | T026, T027 |
+
+Worker ownership ends at document publication and control-state correctness.
+It does not own Azure foundation deployment, Search schema administration,
+knowledge-source promotion, UI/orchestrator source, or query-time access control.
+
+#### Current repository: Landing Zone (`ai-azdevops-retrieval`)
+
+Current source is `feature/customer-deployment-handover` at `686adf2`.
+The portable profile, state parameters, strategy publisher, handoff exporter,
+clean-source guards and regressions are already implemented and committed.
+
+Paths in this table are relative to the **current Landing Zone repository**.
+
+| ID | Remaining todo | Dependency / done condition | Original tasks |
+| --- | --- | --- | --- |
+| LZ-01 | Publish/review this platform feature branch and integrate it into `develop`. | Approved repository/PR flow, passing checks and no unrelated demo data. Do not target `main` or publish a release as an implicit step. | T003, T027 |
+| LZ-03 | Finalize customer tenant/subscription/deployer, resource-group inputs, Entra sign-in, model/API/inference-policy choices and deployment approvals in their own environment. | Customer administrators approve context, quotas, costs, data audience and roles. Use `samples/customer-poc/azd-env.example.json`; retain all existing CIDRs and never copy our `.azure` state. | T003, T024, T025 |
+| LZ-04 | Validate/provision the approved new private foundation and complete connected post-provisioning, application deployment/authentication and separate state-store deployment. | Requires LZ-02-LZ-03 and WRK-03 writer identity. Verify actual private DNS/TLS, service security, runtime strategy, active images and scoped roles. Use `infra/ingestion-state.bicep` separately; no wholesale redeployment of the existing POC. | T024, T025 |
+| LZ-05 | Create/validate the explicit customer index generation and export its full schema/hash and nonsecret worker bindings. | Requires LZ-04. Use `config/search/markdown_index.py` and `config/deployment/ingestion_handoff.py`; verify current serving/non-serving bindings separately, matching embeddings and exact state output. Supply these artifacts to WRK-04. | T025, T026, T027 |
+| LZ-06 | Verify authenticated application behavior, grounded answers, source citations and the approved access boundary; assemble the final compatible handover. | Requires LZ-04-LZ-05, WRK-06 and published central docs. Include exact platform/component/worker/docs revisions, image identities, schema pin, tested commands, recovery guidance and residual risks. Protected content still needs implemented/validated permission enforcement. | T024, T026, T027 |
+
+Landing Zone ownership includes infrastructure, platform configuration, schema,
+retrieval bindings and final integration evidence. It does not absorb the worker
+implementation into this repository.
+
+LZ-02 is complete at the source-selection boundary: public fork branches resolve
+UI `132f70b` and orchestrator `7220406`, and `manifest.json`/`app-definition.json`
+select the same exact full commits. Fresh clones and pin/composition contracts
+pass. No registry image or Azure application was updated.
+
+#### External dependencies: not tasks inside either repository
+
+| Owning repository | Outstanding dependency | Consumer |
+| --- | --- | --- |
+| `agent-app-ui` | Source publication completed: `AsmaeFILALI/agent-app-ui`, `feature/customer-build-feeds` (`132f70b`). A real component release/tag remains optional separately approved promotion work. | LZ-02 completed; LZ-04 consumes the pin |
+| `agent-app-orchestrator` | Source publication completed: `AsmaeFILALI/agent-app-orchestrator`, `feature/citation-guard` (`7220406`). The documented retrieval/citation limitations still apply. | LZ-02 completed; LZ-04 consumes the pin |
+| Central `Azure/AI-Landing-Zones` docs | Publish the coordinated `feature/clarify-agent-foundry-location` source (`1f6c8dd`) and verify customer-visible links match the selected source combination. The strict build already passes. | LZ-06, WRK-04 |
+
+Suggested coordination order:
+
+1. WRK-01/WRK-02 and LZ-01 can advance independently, with publication approval.
+2. Component publication/source selection (LZ-02) is complete; finalize customer inputs in LZ-03.
+3. Prepare the WRK-03 publishing identity, then perform LZ-04/LZ-05.
+4. Complete worker configuration and actual job validation (WRK-04/WRK-05).
+5. Approve WRK-06 publication, then complete LZ-06 integration and delivery.
+
+Code push, source merge, image publication, infrastructure deployment and document
+publication are separate operations. Completing one does not authorize or prove
+the others.
 
 ### Explicit scope adjustment: keep current addresses
 
@@ -292,10 +367,10 @@ the platform's existing source contract.<br>
 **Exit:** Clean component checkouts reproduce the selected behavior without
 access to our worktrees or authenticated personal package feeds.
 
-- [x] T008 [Plan:3.1] Commit and validate the approved UI/orchestrator source changes in their owning feature branches; focused runtime/feed tests, paired script syntax and Dockerfile static checks pass. Full image builds and publication remain T010/T011 gates.
+- [x] T008 [Plan:3.1] Commit and validate the approved UI/orchestrator source changes in their owning feature branches; focused runtime/feed tests and paired script checks pass. Clean image builds are verified under T010; publication and platform pin adoption remain T011 gates.
 - [x] T009 [Plan:3.1] Add fail-closed dirty-worktree checks for bundled and commit-pinned custom component build contexts in `scripts/preDeploy.ps1` and `scripts/preDeploy.sh`; add executable paired guards in `tests/test_component_source.py`, update custom-hook fixtures and preserve unrelated local edits instead of resetting them.
-- [ ] T010 [Plan:3.1] Verify UI/orchestrator `Dockerfile` and child deployment scripts build from approved public sources or explicitly configured customer feeds; never pass authenticated feed credentials through committed files, logged arguments or persistent image layers.
-- [ ] T011 [Plan:3.1] After component review and explicit publication approval, update `manifest.json` and matching `app-definition.json` source commits to the exact accessible validated component versions; extend existing pin contracts rather than selecting latest branches. Record matching image digests and compatibility evidence in the handover.
+- [x] T010 [Plan:3.1] Verify UI/orchestrator `Dockerfile` and paired child build scripts support credential-free feeds; build exact committed sources as Linux/amd64 local images, run dependency/offline smoke checks, and retain TLS verification. The configured HTTPS mirror was required on this workstation; authenticated feeds and customer-network acceptance remain separately approved work.
+- [x] T011 [Plan:3.1] Publish the tested component feature branches to customer-accessible forks and align `manifest.json`/`app-definition.json` with their full commits. Verify fresh clones and exact metadata/graph contracts. Preserve local clean-build image IDs as evidence; registry publication and live adoption are not implied.
 
 ### Phase 4: Complete state-store and ingestion configuration handoff
 
@@ -403,14 +478,52 @@ document-level authorization.
   before a slow concurrent run was interrupted; the remaining five passed in
   a serial resume, including the original Storage and hosted graph checks.
 
+### Additional clean-image and worker evidence, 2026-11-11
+
+- UI `132f70b`: built `poc-handover/ui:132f70b`, local image ID
+  `sha256:e33d2badb145d5237173b692aab09a540809ba24f14b733efac8d443a352206a`.
+- Orchestrator `7220406`: built `poc-handover/orchestrator:7220406`, local image ID
+  `sha256:438e301897f73953f69cffdf6c004c6618150bc141bf130f5533ea639bc28878`.
+- Both builds use exact Git archives without `.azure`, sibling worktrees or
+  feed credentials. Direct public-package artifact downloads failed TLS
+  handshakes; builds succeeded with the existing configured credential-free
+  HTTPS mirror, without changing source/dependency versions or weakening TLS.
+- Both images pass `pip check` in network-disabled containers. Orchestrator
+  retrieval/citation fixes, cached tokenizer and dashboard checks pass offline;
+  the UI's installed wheel, critical imports and packaged entrypoints pass.
+- Current worker suite: **1,015 passed, 6 skipped**, with one missing-console-PATH
+  failure that passed its exact rerun after putting the installed entrypoint on
+  PATH. The prospective combination with handoff docs passes **79 tests** after
+  preparing the checksum-verified public tokenizer.
+- Worker `335df34` recorded exactly the source patch tested during review.
+  A read-only merge preview with handoff `868ad3a` succeeds; no real merge occurred.
+- Neither image is pushed; local image IDs do not constitute registry RepoDigests.
+  Authenticated startup and live customer Azure/ingestion acceptance were not run.
+- Full evidence: ignored
+  `.local/customer-handover/clean-build-20261111/results.json`.
+
 ### Explicitly incomplete/approval-gated tasks
+
+Source-pin adoption verification on 2026-11-11:
+
+- Both customer fork branches were pushed and fresh shallow clones resolved to
+  their exact tested commits with clean source.
+- **193 tests and 76 subtests passed** for coordinated pins, application
+  definition, composition, existing images, hosted preparation and build egress.
+- Bicep build/lint and size gate pass at **4,796,237 bytes**.
+- Historical hosted/Storage fingerprint contracts pass unchanged; the graph
+  normalizer rejects **20 mutations**, including component-pin spoofing.
+- Only expected loaded-manifest component metadata changed in the incorporated
+  fixture, not original resource/output fingerprints.
+- Coordinated documentation strict build passes. No component tags, releases,
+  images or Azure applications were published/deployed by this pin change.
+- Platform pin/doc updates stay on their feature branches until their own
+  publication/review; a local commit does not imply a main merge or deployment.
 
 | Tasks | Status and condition |
 | --- | --- |
-| T001 | Source and ARM image metadata captured; registry digest lookup unavailable over current private network path. |
+| T001 | Source and original ARM image metadata captured; new clean local candidate image IDs recorded. Registry publication/deployed registry digest verification remains outstanding. |
 | T003 | Public pinned component tags verified; customer-specific worker/repository access and ownership still need confirmation. |
-| T011 | Local component source commits now exist, but the platform pins remain unchanged. Publication and compatible pin adoption still require explicit review/approval. |
-| T010 | Source/feed handling reviewed; new clean component Docker builds and any corporate-feed integration still need validation. |
 | T024 | Clean offline source validation passes; authenticated UI/orchestrator startup remains unverified. |
 | T025, T026 | Require customer tenant/subscription, explicit paid deployment/data approval and working private connectivity. No Azure writes performed. |
 | T027 | Local delivery-status evidence exists; final accepted package/publication awaits the above gates. |

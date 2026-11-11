@@ -99,8 +99,8 @@ function ConvertTo-HistoricalFoundationGraph {
     }
     $fixture = Get-Content (Join-Path $PSScriptRoot 'fixtures\incorporated-foundation-normalization.json') -Raw |
         ConvertFrom-Json -AsHashtable -Depth 100
-    # Release numbers are variable; repository URLs, component pins, source
-    # provenance, manifest shape and all deployment values remain exact.
+    # Release numbers are variable; the fixture pins exact reviewed component
+    # sources. Foundation provenance and all deployment values remain exact.
     $manifestRule = $fixture.projection.changes.variables.changes['$fxv#0']
     $manifestRule.changes.tag.after = $umbrella.tag
     $manifestRule.changes.tag.before = $foundation.tag
