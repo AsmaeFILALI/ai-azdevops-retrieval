@@ -397,6 +397,15 @@ while IFS= read -r comp; do
     fi
   fi
 
+  if ! component_status="$(git -C "$target" status --porcelain --untracked-files=all 2>/dev/null)"; then
+    red "$name: could not verify a clean component checkout; no build performed."
+    had_errors=1; continue
+  fi
+  if [ -n "$component_status" ]; then
+    red "$name requires a clean component checkout before building. Commit reviewed changes or use a separate clean checkout; no files were reset."
+    had_errors=1; continue
+  fi
+
   git config --global --add safe.directory "$target" >/dev/null 2>&1 || true
   copy_dot_azure "$dot_azure" "$target"
 
@@ -440,6 +449,14 @@ while IFS= read -r dcomp; do
     actual_commit="$(git -C "$c_path" rev-parse HEAD 2>/dev/null || true)"
     if [ "$actual_commit" != "$c_commit" ]; then
       red "$c_name must resolve to $c_commit but $c_path is at '$actual_commit'."
+      had_errors=1; continue
+    fi
+    if ! component_status="$(git -C "$c_path" status --porcelain --untracked-files=all 2>/dev/null)"; then
+      red "$c_name: could not verify a clean component checkout; no build performed."
+      had_errors=1; continue
+    fi
+    if [ -n "$component_status" ]; then
+      red "$c_name requires a clean component checkout before building. No files were reset."
       had_errors=1; continue
     fi
   fi

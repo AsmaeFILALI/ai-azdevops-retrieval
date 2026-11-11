@@ -45,6 +45,12 @@ reuse depend on deployment settings. Select an image to open the full-resolution
 - [Infrastructure only](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/deploy-infra-only/) — Provision the foundation without deploying application images.
 - [Custom applications](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/build-your-own-app/) — Deploy your own application on the foundation.
 
+For the private Azure DevOps Markdown POC, start with the reviewed
+[customer input examples](samples/customer-poc/) and the
+[customer deployment runbook](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/azure-devops-markdown-poc/).
+Use the platform revision supplied with the handover, not an unreviewed default
+branch. The separate Markdown worker is not the bundled ingestion component.
+
 ## Components
 
 Component versions for this release are pinned in [manifest.json](manifest.json).

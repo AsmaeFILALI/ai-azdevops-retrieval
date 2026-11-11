@@ -71,6 +71,19 @@ class ConflictingTopologySignalsError(DeploymentTopologyError):
     """
 
 
+def runtime_strategy_settings(environment: Mapping[str, str]) -> dict[str, str]:
+    """Forward an explicit strategy without changing existing runtime defaults."""
+    if "AGENT_STRATEGY" not in environment:
+        return {}
+    value = environment["AGENT_STRATEGY"]
+    if value not in {
+        "single_agent_rag", "multiagent", "mcp", "maf_agent_service",
+        "maf_lite", "multimodal", "nl2sql",
+    }:
+        raise ValueError("AGENT_STRATEGY must name a supported orchestrator strategy.")
+    return {"AGENT_STRATEGY": value}
+
+
 def is_truthy(value: str | None) -> bool:
     return (value or "").strip().lower() in {"1", "true", "t", "yes", "y"}
 
@@ -853,6 +866,7 @@ def compose_parameters(
         "value": [
             _setting(DEPLOY_INGESTION_CONTAINER_APP, str(deploy_ingestion).lower()),
             *[_setting(name, value) for name, value in search_settings.items()],
+            *[_setting(name, value) for name, value in runtime_strategy_settings(environment).items()],
             _setting(
                 "DEPLOY_HOSTED_AGENT_ORCHESTRATION",
                 str(runtime_hosted).lower(),

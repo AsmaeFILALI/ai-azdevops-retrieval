@@ -445,6 +445,13 @@ foreach ($c in $manifest.components) {
     }
   }
 
+  $componentStatus = & git -C $target status --porcelain --untracked-files=all 2>$null
+  if ($LASTEXITCODE -ne 0 -or $componentStatus) {
+    Write-Error "$name requires a clean component checkout before building. Commit reviewed changes or use a separate clean checkout; no files were reset."
+    $hadErrors = $true
+    continue
+  }
+
   # Copy shared azd env into the freshly cloned project
   if (Test-Path -LiteralPath $dotAzure) {
     Copy-Item $dotAzure $target -Recurse -Force -Container
@@ -498,6 +505,12 @@ foreach ($dc in $definitionComponents) {
     $actualCommit = "$(& git -C $componentPath rev-parse HEAD 2>$null)".Trim()
     if ($LASTEXITCODE -ne 0 -or $actualCommit -ne $sourceCommit) {
       Write-Error "$componentName must resolve to $sourceCommit but $componentPath is at '$actualCommit'."
+      $hadErrors = $true
+      continue
+    }
+    $componentStatus = & git -C $componentPath status --porcelain --untracked-files=all 2>$null
+    if ($LASTEXITCODE -ne 0 -or $componentStatus) {
+      Write-Error "$componentName requires a clean component checkout before building. No files were reset."
       $hadErrors = $true
       continue
     }
