@@ -85,6 +85,22 @@ central AI Landing Zones site, with a short README entry here.
 
 ## Fitness functions and review triggers
 
+### Customer-local documentation delivery, 2026-11-12
+
+The customer can access only this platform repository. At the user's explicit
+request, provide the profile's deployment, configuration, VPN/private-access
+and application-authentication guidance under `docs/customer/`, linked locally
+from README. This is a scoped customer-handover exception to the central-site
+documentation policy, not a change to runtime repository ownership.
+
+Consolidate the relevant central-source material with its original provenance
+and MIT attribution; do not make a separate docs checkout or website build a
+prerequisite. Validate all local guide links and source/profile consistency.
+Keep this bundle aligned with future changes to the delivered platform.
+The customer still needs an approved delivery of UI/orchestrator and worker
+source or artifacts; local documentation alone does not resolve that blocker.
+No source pins, deployment hooks, resources or access permissions change.
+
 ### PR #2 review remediation
 
 - Record genuine `upstream` repo/tag/commit metadata for each fork. Verify it is

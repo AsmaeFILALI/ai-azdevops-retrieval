@@ -14,10 +14,12 @@ the UI and orchestrator, and onboard their own Azure DevOps Markdown ingestion.
 The deployment must not depend on our saved environment, sibling worktrees,
 personal resource names, private registry, VPN profile, or manual portal edits.
 
-This is a repository engineering plan, not a second copy of product deployment
-documentation. Customer/operator instructions belong in the central
-`Azure/AI-Landing-Zones` documentation source. The platform README should link
-to that guidance and to sanitized, versioned examples.
+This is a repository engineering plan. At the customer's explicit request on
+2026-11-12, the profile's operator instructions are now delivered in the
+[local documentation bundle](../customer/README.md), with sanitized examples.
+This scoped exception removes the separate documentation-repository access
+requirement; the central site's generic guidance remains optional.
+UI/orchestrator and worker source delivery are still separate requirements.
 
 The user subsequently requested implementation on 2026-11-10. Source
 portability work and coordinated documentation are committed locally. No Azure
@@ -48,10 +50,11 @@ GitHub releases, repository visibility or customer access changes are included.
   source publication and live ingestion/recovery remain
   outstanding gates. No workload VPN route is currently available; registry
   digest lookup could not be completed. Do not infer success from image tags.
-- The customer guide is published as immutable source in the central docs fork,
-  linked from README; official-site publication remains pending. Worker handoff
-  source integration is separate. The unrelated `golden-qa.jsonl` remains
-  untouched and excluded.
+- The customer guide and required configuration/private-access/authentication
+  guidance are delivered locally under `docs/customer/`, linked from README.
+  Their earlier central-source revision remains provenance, not a customer
+  access requirement. Official-site publication and worker source integration
+  are separate. The unrelated `golden-qa.jsonl` remains untouched and excluded.
 
 Offline evidence is recorded under ignored `.local/customer-handover/`:
 source decisions, image metadata limitations, source hashes and clean-snapshot
@@ -102,7 +105,7 @@ Paths in this table are relative to the **current Landing Zone repository**.
 | LZ-03 | Finalize customer tenant/subscription/deployer, resource-group inputs, Entra sign-in, model/API/inference-policy choices and deployment approvals in their own environment. | Customer administrators approve context, quotas, costs, data audience and roles. Use `samples/customer-poc/azd-env.example.json`; retain all existing CIDRs and never copy our `.azure` state. | T003, T024, T025 |
 | LZ-04 | Validate/provision the approved new private foundation and complete connected post-provisioning, application deployment/authentication and separate state-store deployment. | Requires LZ-02-LZ-03 and WRK-03 writer identity. Verify actual private DNS/TLS, service security, runtime strategy, active images and scoped roles. Use `infra/ingestion-state.bicep` separately; no wholesale redeployment of the existing POC. | T024, T025 |
 | LZ-05 | Create/validate the explicit customer index generation and export its full schema/hash and nonsecret worker bindings. | Requires LZ-04. Use `config/search/markdown_index.py` and `config/deployment/ingestion_handoff.py`; verify current serving/non-serving bindings separately, matching embeddings and exact state output. Supply these artifacts to WRK-04. | T025, T026, T027 |
-| LZ-06 | Verify authenticated application behavior, grounded answers, source citations and the approved access boundary; assemble the final compatible handover. | Requires LZ-04-LZ-05, WRK-06 and published central docs. Include exact platform/component/worker/docs revisions, image identities, schema pin, tested commands, recovery guidance and residual risks. Protected content still needs implemented/validated permission enforcement. | T024, T026, T027 |
+| LZ-06 | Verify authenticated application behavior, grounded answers, source citations and the approved access boundary; assemble the final compatible handover. | Requires LZ-04-LZ-05, WRK-06 and the published repository-local customer docs. Include exact platform/component/worker/docs revisions, image identities, schema pin, tested commands, recovery guidance and residual risks. Protected content still needs implemented/validated permission enforcement. | T024, T026, T027 |
 
 Landing Zone ownership includes infrastructure, platform configuration, schema,
 retrieval bindings and final integration evidence. It does not absorb the worker
@@ -229,7 +232,7 @@ not from a separate formal specification.
 | REQ-005 | Document private-network bootstrap, authentication, build and service configuration. |
 | REQ-006 | Provide separate state-store deployment inputs and a nonsecret worker handoff. |
 | REQ-007 | Onboard the worker with exact schema, identity, source and pipeline approval inputs. |
-| REQ-008 | Publish consistent customer guidance in the central documentation site. |
+| REQ-008 | Deliver consistent customer guidance inside this repository; no separate documentation-repository access is required. |
 | REQ-009 | Demonstrate a clean-checkout deployment with verifiable acceptance evidence. |
 | REQ-010 | Preserve authorization boundaries, data, rollback options and human publication/deployment approvals. |
 
@@ -399,13 +402,19 @@ consistent; offline validation is distinct from live publication authorization.
 
 ### Phase 5: Publish the customer runbook and local development path
 
-**Plan item 5.1:** Consolidate existing documentation edits and add one complete
-customer journey in the central site.<br>
+**Plan item 5.1:** Consolidate existing documentation edits and deliver one
+complete customer journey.<br>
 **Requirements:** REQ-003, REQ-005, REQ-006, REQ-007, REQ-008, REQ-010.<br>
 **Prerequisites:** T004-T017 define the shipped interfaces; an initial outline
 may be drafted earlier but must not be published ahead of those interfaces.<br>
 **Exit:** An operator can follow the docs without our local files or portal
 knowledge. Repository READMEs link to the correct versioned guidance.
+
+T018-T022 record the original coordinated central-source work. The customer's
+2026-11-12 delivery requirement supersedes that location: the relevant guidance
+is consolidated under `docs/customer/` with local links, attribution and
+link/profile/pin regressions. Central-site publication is no longer a customer
+deployment prerequisite.
 
 - [x] T018 [Plan:5.1] In the central docs feature branch, add `docs/agent-landing-zone/azure-devops-markdown-poc.md` and register it in `mkdocs.yml`; describe pinned source access, prerequisites, approved inputs, model-policy review, private bootstrap, app deployment, state deployment, worker onboarding and acceptance.
 - [x] T019 [Plan:5.1] Update central `configuration.md`, `deploy-infra-only.md`, `private-access.md` and `network-isolation.md` for `COSMOS_ACCOUNT_NAME`, profile input/output ownership, retained CIDRs, Entra VPN profile/DNS setup, explicit post-provision deferral and its mandatory completion.
@@ -431,7 +440,7 @@ risks recorded honestly.
 
 ## 6. Documentation content checklist
 
-The central customer guide must cover:
+The delivered customer guide must cover:
 
 1. What is included and which separate repositories the customer must obtain.
 2. Exact reviewed revisions and the supported Python, azd, Bicep and build tools.
@@ -609,7 +618,7 @@ quality commands.
 2. Implement portable inputs/profile and preserve existing POC identity overrides.
 3. Validate and publish approved component sources before binding platform pins.
 4. Finalize state-store and worker handoff, with compatible worker revision.
-5. Review coordinated central docs and exact command examples.
+5. Review the repository-local customer docs and exact command examples.
 6. Validate offline, then rehearse on a separately authorized new environment.
 7. Deliver the accepted combination; use the normal release workflow only after
    explicit release approval.

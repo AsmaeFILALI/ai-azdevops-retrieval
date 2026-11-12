@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Changed
+- Include a self-contained customer deployment documentation bundle in this
+  repository, with local configuration, VPN/private-access and authentication
+  guidance. Remove the customer guide's separate documentation-repository access
+  requirement; retain explicit component/worker source-delivery gates.
 - Select the clean-built customer UI and orchestrator fixes from public forks
   using feature-branch references plus exact full commit verification. Align
   `app-definition.json` with the same commits. No new upstream version tags
