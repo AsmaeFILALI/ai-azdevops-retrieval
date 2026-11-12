@@ -66,17 +66,30 @@ implementations or provide an offline build.
 
 ## Components
 
-Component versions for this release are pinned in [manifest.json](manifest.json).
+Component repositories and commits are pinned in [manifest.json](manifest.json).
+The UI/orchestrator links below open the selected customer source revisions.
 
 | Component | Repository |
 |---|---|
-| UI | [Azure/agent-app-ui](https://github.com/Azure/agent-app-ui) |
-| Orchestrator | [Azure/agent-app-orchestrator](https://github.com/Azure/agent-app-orchestrator) |
-| Ingestion (optional) | [Azure/agent-app-ingestion](https://github.com/Azure/agent-app-ingestion) |
+| UI | [AsmaeFILALI/agent-app-ui](https://github.com/AsmaeFILALI/agent-app-ui/tree/7ff09f49325d91018b2d443f993edf9b4cfd042d) |
+| Orchestrator | [AsmaeFILALI/agent-app-orchestrator](https://github.com/AsmaeFILALI/agent-app-orchestrator/tree/a825e0bd2d0a7930da55a5ef9f7d20e2d4b036e2) |
+| Bundled ingestion (disabled in this customer profile) | [Azure/agent-app-ingestion](https://github.com/Azure/agent-app-ingestion) |
 
 ## Documentation
 
 For this customer POC, use the [repository-local documentation](docs/customer/README.md).
+
+- [Deployment runbook](docs/customer/azure-devops-markdown-poc.md)
+- [Configuration and ownership](docs/customer/configuration.md)
+- [VPN and private access](docs/customer/private-access.md)
+- [Application authentication](docs/customer/application-auth.md)
+
+Deployment inputs and the separate pipeline state-store template:
+
+- [Customer azd environment profile](samples/customer-poc/azd-env.example.json)
+- [Ingestion state-store parameters](samples/customer-poc/ingestion-state.parameters.example.json)
+- [Ingestion state-store Bicep template](infra/ingestion-state.bicep)
+
 The [AI Landing Zones documentation site](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/)
 is an optional general reference for other supported deployment modes.
 

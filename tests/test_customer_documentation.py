@@ -48,6 +48,23 @@ def test_readme_uses_local_customer_entrypoint():
     assert "[complete customer documentation bundle](docs/customer/README.md)" in readme
     assert DOCS.joinpath("README.md").is_file()
     assert len(PAGES) >= 5
+    for page in PAGES:
+        assert f"]({page.relative_to(ROOT).as_posix()})" in readme
+    for relative in (
+        "samples/customer-poc/azd-env.example.json",
+        "samples/customer-poc/ingestion-state.parameters.example.json",
+        "infra/ingestion-state.bicep",
+    ):
+        assert f"]({relative})" in readme
+
+
+def test_readme_links_selected_component_sources():
+    manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    for component in manifest["components"]:
+        if component["name"] in {"agent-app-ui", "agent-app-orchestrator"}:
+            repository = component["repo"].removesuffix(".git")
+            assert f"]({repository}/tree/{component['commit']})" in readme
 
 
 def test_customer_guide_records_current_component_pins():
