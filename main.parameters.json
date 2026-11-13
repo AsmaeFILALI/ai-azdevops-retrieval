@@ -193,7 +193,7 @@
     "appInsightsName":                       { "value": null },
     "containerEnvName":                      { "value": "${CONTAINER_ENV_NAME=}" },
     "containerRegistryName":                 { "value": null },
-    "dbAccountName":                         { "value": "cosmos-igdo2y-ai-azdevops-retrieval-cnc-001" },
+    "dbAccountName":                         { "value": "${COSMOS_ACCOUNT_NAME=}" },
     "dbDatabaseName":                        { "value": null },
     "dbDatabaseThroughput":                  { "value": null },
     "keyVaultName":                          { "value": null },

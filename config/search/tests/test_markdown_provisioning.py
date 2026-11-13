@@ -60,6 +60,19 @@ def downstream(stack):
     return mocks
 
 
+def test_search_setup_keeps_the_configuration_loader_credential_timeout():
+    with ExitStack() as stack:
+        downstream(stack)
+        cli_credential = stack.enter_context(patch.object(setup, "AzureCliCredential"))
+        managed_credential = stack.enter_context(patch.object(setup, "ManagedIdentityCredential"))
+        setup.execute_setup({}, {
+            "SEARCH_SERVICE_QUERY_ENDPOINT": "https://test.search.windows.net",
+            "SEARCH_API_VERSION": "2025-09-01",
+        })
+    cli_credential.assert_called_once_with(process_timeout=30)
+    managed_credential.assert_called_once_with(process_timeout=30)
+
+
 @pytest.mark.parametrize("value", [None, "", " ", "standard"])
 def test_default_and_empty_schema_preserve_standard_behavior(value):
     assert schema_selection.public_settings({"SEARCH_RAG_SCHEMA": value}) == {"SEARCH_RAG_SCHEMA": "standard"}
@@ -234,8 +247,12 @@ def test_normal_configuration_loader_persists_selector_and_renders_markdown():
     client.list_configuration_settings.return_value = [Mock(key=key, value=value) for key, value in context.items()]
     with patch.dict(setup.os.environ, {"APP_CONFIG_ENDPOINT": "https://test.azconfig.io"}), patch.object(
         setup, "AzureAppConfigurationClient", return_value=client,
-    ), patch.object(setup, "ChainedTokenCredential"):
+    ), patch.object(setup, "ChainedTokenCredential"), patch.object(
+        setup, "AzureCliCredential",
+    ) as cli_credential, patch.object(setup, "ManagedIdentityCredential") as managed_credential:
         definitions, loaded = setup.prepare_context_and_render("search.j2", str(ROOT / "config" / "search"))
+    cli_credential.assert_called_once_with(process_timeout=30)
+    managed_credential.assert_called_once_with(process_timeout=30)
     markdown_index.validate_platform_index(
         definitions["indexes"][0],
         markdown_index.render_index(NAME, EMBEDDING["endpoint"], "text-embedding"),

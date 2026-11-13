@@ -45,19 +45,54 @@ reuse depend on deployment settings. Select an image to open the full-resolution
 - [Infrastructure only](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/deploy-infra-only/) — Provision the foundation without deploying application images.
 - [Custom applications](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/build-your-own-app/) — Deploy your own application on the foundation.
 
+For the private Azure DevOps Markdown POC, start with the reviewed
+[customer input examples](samples/customer-poc/) and the
+[customer deployment runbook](docs/customer/azure-devops-markdown-poc.md).
+The [complete customer documentation bundle](docs/customer/README.md) includes
+configuration, private access and application authentication guidance locally;
+access to the separate documentation repository is not required.
+Use the platform revision supplied with the handover, not an unreviewed default
+branch. The separate Markdown worker is not the bundled ingestion component.
+
+This customer branch selects the tested UI/orchestrator fixes from public
+customer forks through `manifest.json`: a feature-branch ref locates each source,
+and its full commit pin is verified before building. These are source candidates,
+not new upstream release tags. Moving a selected branch to another commit fails
+the pin check until the references are deliberately updated.
+Component `upstream` metadata records the genuine release provenance separately
+from the branch used to fetch fixes. Application/component and worker source
+access is still required: the local documentation bundle does not vendor those
+implementations or provide an offline build.
+
 ## Components
 
-Component versions for this release are pinned in [manifest.json](manifest.json).
+Component repositories and commits are pinned in [manifest.json](manifest.json).
+The UI/orchestrator links below open the selected customer source revisions.
 
 | Component | Repository |
 |---|---|
-| UI | [Azure/agent-app-ui](https://github.com/Azure/agent-app-ui) |
-| Orchestrator | [Azure/agent-app-orchestrator](https://github.com/Azure/agent-app-orchestrator) |
-| Ingestion (optional) | [Azure/agent-app-ingestion](https://github.com/Azure/agent-app-ingestion) |
+| UI | [AsmaeFILALI/agent-app-ui](https://github.com/AsmaeFILALI/agent-app-ui/tree/7ff09f49325d91018b2d443f993edf9b4cfd042d) |
+| Orchestrator | [AsmaeFILALI/agent-app-orchestrator](https://github.com/AsmaeFILALI/agent-app-orchestrator/tree/a825e0bd2d0a7930da55a5ef9f7d20e2d4b036e2) |
+| Bundled ingestion (disabled in this customer profile) | [Azure/agent-app-ingestion](https://github.com/Azure/agent-app-ingestion) |
 
 ## Documentation
 
-The full documentation lives in the Agent Landing Zone section of the [AI Landing Zones documentation site](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/).
+For this customer POC, use the [repository-local documentation](docs/customer/README.md).
+
+- [Deployment runbook](docs/customer/azure-devops-markdown-poc.md)
+- [Configuration and ownership](docs/customer/configuration.md)
+- [VPN and private access](docs/customer/private-access.md)
+- [Application authentication](docs/customer/application-auth.md)
+
+Deployment inputs and the separate pipeline state-store template:
+
+- [Customer azd environment profile](samples/customer-poc/azd-env.example.json)
+- [VPN client DNS configuration fragment](samples/customer-poc/vpn-clientconfig.example.xml)
+- [Ingestion state-store parameters](samples/customer-poc/ingestion-state.parameters.example.json)
+- [Ingestion state-store Bicep template](infra/ingestion-state.bicep)
+
+The [AI Landing Zones documentation site](https://azure.github.io/AI-Landing-Zones/agent-landing-zone/)
+is an optional general reference for other supported deployment modes.
 
 ## Contributing
 

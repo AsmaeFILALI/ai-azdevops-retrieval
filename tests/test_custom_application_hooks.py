@@ -115,7 +115,11 @@ $definitionComponents = @((Get-Content (Join-Path $appDefinitionDir 'app-definit
 $globalEnv = [pscustomobject]@{ AZURE_ENV_NAME = 'offline' }
 $hadErrors = $false
 function Get-ManifestComponentForDefinition { return $null }
-function git { $global:LASTEXITCODE = 0; return $env:FAKE_COMMIT }
+function git {
+    $global:LASTEXITCODE = 0
+    if ($args -contains 'status') { return }
+    return $env:FAKE_COMMIT
+}
 function python {
     if ($args.Count -ge 2 -and "$($args[1])".Contains('config.deployment.custom_application')) {
         & $env:REAL_PYTHON (Join-Path $env:FAKE_ROOT 'custom-deploy.py') @($args[2..($args.Count - 1)])
@@ -180,7 +184,7 @@ red() { printf '%s\n' "$*"; }
 green() { :; }
 cyan() { :; }
 manifest_component_for() { :; }
-git() { printf '%s\n' "$FAKE_COMMIT"; }
+git() { [[ "$*" == *" status "* ]] || printf '%s\n' "$FAKE_COMMIT"; }
 copy_dot_azure() { cp -R "$1" "$2/"; }
 azd() {
     [ "$PWD" = "$FAKE_APP" ] || return 91

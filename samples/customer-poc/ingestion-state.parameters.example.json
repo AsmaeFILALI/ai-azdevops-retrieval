@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": { "value": "<CUSTOMER_ENVIRONMENT>" },
+    "location": { "value": "canadaeast" },
+    "privateEndpointSubnetResourceId": {
+      "value": "/subscriptions/<SUBSCRIPTION_UUID>/resourceGroups/<NETWORK_RG>/providers/Microsoft.Network/virtualNetworks/<VNET>/subnets/pe-subnet"
+    },
+    "blobPrivateDnsZoneResourceId": {
+      "value": "/subscriptions/<SUBSCRIPTION_UUID>/resourceGroups/<DNS_RG>/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net"
+    },
+    "writerPrincipalId": { "value": "<APPROVED_WORKER_SERVICE_PRINCIPAL_OBJECT_UUID>" },
+    "writerPrincipalType": { "value": "ServicePrincipal" },
+    "ingestionResourceGroupName": { "value": "" },
+    "storageAccountName": { "value": "" },
+    "containerName": { "value": "ingestion-state" },
+    "softDeleteRetentionDays": { "value": 14 },
+    "tags": { "value": { "purpose": "ingestion-control-state" } }
+  }
+}

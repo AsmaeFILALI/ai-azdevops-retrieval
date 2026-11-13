@@ -26,6 +26,25 @@ def version_tuple(tag):
     return tuple(int(part) for part in core.split("."))
 
 
+def component_runtime_version(component):
+    """Source locator tags and the reviewed upstream runtime version differ for forks."""
+    return version_tuple(component["tag"] or component["upstream"]["tag"])
+
+
+class RuntimeSourceVersionTests(unittest.TestCase):
+    def test_tagged_and_pinned_fork_sources_preserve_the_same_runtime_gate(self):
+        tagged = {"tag": "v5.2.1"}
+        fork = {"tag": "", "upstream": {"tag": "v5.2.1"}}
+        self.assertEqual(component_runtime_version(tagged), component_runtime_version(fork))
+        self.assertGreaterEqual(component_runtime_version(fork), version_tuple(MCP_RUNTIME_CONTRACT_MIN_VERSION))
+
+    def test_untagged_source_without_real_version_provenance_fails(self):
+        with self.assertRaises(KeyError):
+            component_runtime_version({"tag": ""})
+        with self.assertRaises(ValueError):
+            component_runtime_version({"tag": "", "upstream": {"tag": ""}})
+
+
 def render_json_template(template_name, context):
     env = Environment(
         loader=FileSystemLoader(TEMPLATE_DIR),
@@ -950,7 +969,7 @@ class FoundryIqMcpTemplateTests(unittest.TestCase):
             if component["name"] == "agent-app-orchestrator"
         )
         self.assertGreaterEqual(
-            version_tuple(orchestrator["tag"]),
+            component_runtime_version(orchestrator),
             version_tuple(MCP_RUNTIME_CONTRACT_MIN_VERSION),
         )
 
