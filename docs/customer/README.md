@@ -15,8 +15,11 @@ is not required.
 
 Commands assume the repository root, not this documentation directory.
 Use the [customer profile](../../samples/customer-poc/azd-env.example.json) and
-[state-store example](../../samples/customer-poc/ingestion-state.parameters.example.json);
-replace placeholders in ignored local copies.
+[state-store example](../../samples/customer-poc/ingestion-state.parameters.example.json).
+Fill the customer-profile placeholders in an ignored local copy.
+[Runbook step 5](azure-devops-markdown-poc.md#5-deploy-the-independent-control-state-store)
+generates the state parameter file automatically from azd and verified deployed
+network resources; do not copy resource IDs or edit that JSON manually.
 The [VPN DNS configuration fragment](../../samples/customer-poc/vpn-clientconfig.example.xml)
 must be merged into the customer's downloaded full profile before import;
 see [private access](private-access.md#prepare-windows-split-dns-settings).

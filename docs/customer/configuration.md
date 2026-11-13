@@ -123,6 +123,15 @@ only when explicitly invoked through Azure CLI. It grants the supplied writer
 container-scoped Storage Blob Data Contributor, not Search/inference permissions.
 It creates no Markdown staging source or Search indexer.
 
+Step 5 of the [deployment runbook](azure-devops-markdown-poc.md#5-deploy-the-independent-control-state-store)
+generates the state parameter file from selected azd values and read-only
+network/DNS queries; no manual JSON edits or resource-ID copying is required.
+`INGESTION_STATE_WRITER_PRINCIPAL_ID` must be the explicitly approved worker
+service-principal object ID. Optional `INGESTION_STATE_RESOURCE_GROUP_NAME` and
+`INGESTION_STATE_STORAGE_ACCOUNT_NAME` preserve custom existing state names.
+These are operator-only azd metadata for parameter generation, not runtime
+settings or automatic inputs to `azd provision`.
+
 The independent worker owns document synchronization, embeddings, leases,
 run intents and checkpoints. Its schema-read, document-write, inference, state,
 repository checkout and WIF permissions are separate.

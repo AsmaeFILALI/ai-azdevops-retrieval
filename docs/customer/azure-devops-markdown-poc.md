@@ -255,22 +255,172 @@ state alone does not establish application readiness.
 
 The state store is **not automatically deployed by `azd provision` or `azd up`**.
 Create/select the customer WIF publishing service principal with the
-administrator before supplying `writerPrincipalId`. Copy and fill
-[the native ARM parameter example](../../samples/customer-poc/ingestion-state.parameters.example.json)
-in an ignored location such as `.local/state.parameters.json`.
-Use the actual workload private-endpoint subnet and linked Blob private-DNS
-zone ARM IDs. Defaults generate new account/resource-group names.
-
-After preview review and explicit write approval:
+administrator first. Record its approved **service-principal object ID** in the
+selected azd environment as `INGESTION_STATE_WRITER_PRINCIPAL_ID`, through the
+identity setup automation or:
 
 ```powershell
-az deployment sub validate --location canadaeast --subscription <subscription> `
+azd env set INGESTION_STATE_WRITER_PRINCIPAL_ID <approved-worker-service-principal-object-id>
+```
+
+This is an operator-only input, not a secret or an App Configuration runtime key.
+It is **not** the application/client ID or automatically the deployer's
+`AZURE_PRINCIPAL_ID`. The platform cannot safely invent or choose the worker
+identity. The commands below require that approved input and verify the service
+principal; they do not create an identity or grant permissions.
+
+### Generate the parameter file automatically
+
+Run this PowerShell 7 block from the repository root after foundation
+provisioning. It loads the **selected azd environment**, queries its actual VNet,
+`pe-subnet` and Blob private-DNS zone/link, and generates
+`.local/state.parameters.json` from
+[the native ARM parameter example](../../samples/customer-poc/ingestion-state.parameters.example.json).
+No manual JSON editing or copying resource IDs is needed.
+
+This block targets the supplied standalone, new-VNet, template-managed DNS
+customer profile. Missing resources, unlinked/policy-managed DNS or a customized
+subnet layout stop generation rather than guessing another target. Azure CLI
+must already select the same subscription and tenant as azd, with read access
+to the network/DNS resources and the approved Entra service principal.
+
+```powershell
+$ErrorActionPreference = 'Stop'
+
+# Generate ingestion-state parameters from the selected azd environment.
+function Get-StateAzJson {
+    param([string[]]$Arguments)
+    $raw = & az @Arguments --only-show-errors --output json
+    if ($LASTEXITCODE -ne 0) { throw 'Azure lookup failed; state parameters were not generated.' }
+    return ($raw -join "`n") | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+}
+
+$rawEnvironment = & azd env get-values --output json
+if ($LASTEXITCODE -ne 0) { throw 'Cannot load the selected azd environment.' }
+$azd = ($rawEnvironment -join "`n") | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+if ($azd -isnot [System.Collections.IDictionary]) { throw 'Invalid azd environment output; expected an object.' }
+foreach ($key in @(
+    'AZURE_ENV_NAME', 'AZURE_SUBSCRIPTION_ID', 'AZURE_TENANT_ID',
+    'AZURE_NETWORK_RESOURCE_GROUP', 'VNET_RESOURCE_ID',
+    'INGESTION_STATE_WRITER_PRINCIPAL_ID'
+)) {
+    if ([string]::IsNullOrWhiteSpace($azd[$key])) {
+        throw "Missing $key in the selected azd environment. Complete the approved input or foundation step first."
+    }
+}
+if ($azd.DEPLOYMENT_MODE -ne 'standalone' -or
+    $azd.NETWORK_ISOLATION -ne 'true' -or $azd.USE_EXISTING_VNET -ne 'false' -or
+    $azd.SIDE_BY_SIDE -ne 'true') {
+    throw 'This generator requires the supplied standalone private customer profile.'
+}
+$subscription = $azd.AZURE_SUBSCRIPTION_ID
+$networkGroup = $azd.AZURE_NETWORK_RESOURCE_GROUP
+$writerId = $azd.INGESTION_STATE_WRITER_PRINCIPAL_ID
+$guid = [guid]::Empty
+if (-not [guid]::TryParse($writerId, [ref]$guid) -or $guid -eq [guid]::Empty) {
+    throw 'INGESTION_STATE_WRITER_PRINCIPAL_ID must be an approved service-principal object GUID.'
+}
+$account = Get-StateAzJson @('account', 'show')
+if ($account.id -ine $subscription -or $account.tenantId -ine $azd.AZURE_TENANT_ID) {
+    throw 'Azure CLI and azd target different subscriptions or tenants. Confirm the intended login/context first.'
+}
+$vnetPrefix = "/subscriptions/$subscription/resourceGroups/$networkGroup/providers/Microsoft.Network/virtualNetworks/"
+if (-not $azd.VNET_RESOURCE_ID.StartsWith($vnetPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'VNET_RESOURCE_ID is outside this customer network destination.'
+}
+$vnet = Get-StateAzJson @(
+    'network', 'vnet', 'show', '--ids', $azd.VNET_RESOURCE_ID,
+    '--subscription', $subscription
+)
+if ($vnet.id -ine $azd.VNET_RESOURCE_ID -or
+    $vnet.provisioningState -ne 'Succeeded' -or
+    [string]::IsNullOrWhiteSpace($vnet.location)) {
+    throw 'The selected customer VNet is not ready.'
+}
+$subnets = @($vnet.subnets | Where-Object {
+    $_.name -eq 'pe-subnet' -and $_.id -ieq "$($vnet.id)/subnets/pe-subnet" -and
+    $_.provisioningState -eq 'Succeeded'
+})
+if ($subnets.Count -ne 1) { throw 'Expected one ready pe-subnet in the selected VNet.' }
+$zone = Get-StateAzJson @(
+    'network', 'private-dns', 'zone', 'show', '--resource-group', $networkGroup,
+    '--name', 'privatelink.blob.core.windows.net', '--subscription', $subscription
+)
+$expectedZoneId = "/subscriptions/$subscription/resourceGroups/$networkGroup/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net"
+if ($zone.id -ine $expectedZoneId) { throw 'Blob private-DNS zone does not match the customer network destination.' }
+$links = @(Get-StateAzJson @(
+    'network', 'private-dns', 'link', 'vnet', 'list', '--resource-group', $networkGroup,
+    '--zone-name', 'privatelink.blob.core.windows.net', '--subscription', $subscription
+))
+if (@($links | Where-Object {
+    $_.virtualNetwork.id -ieq $vnet.id -and $_.provisioningState -eq 'Succeeded'
+}).Count -eq 0) { throw 'Blob private-DNS zone is not linked to the selected VNet.' }
+$writer = Get-StateAzJson @('ad', 'sp', 'show', '--id', $writerId)
+if ($writer.id -ine $writerId) { throw 'Writer lookup did not return the approved service-principal object ID.' }
+
+$state = Get-Content -Raw .\samples\customer-poc\ingestion-state.parameters.example.json |
+    ConvertFrom-Json -AsHashtable
+$state.parameters.environmentName.value = $azd.AZURE_ENV_NAME
+$state.parameters.location.value = $vnet.location
+$state.parameters.privateEndpointSubnetResourceId.value = $subnets[0].id
+$state.parameters.blobPrivateDnsZoneResourceId.value = $zone.id
+$state.parameters.writerPrincipalId.value = $writer.id
+$state.parameters.writerPrincipalType.value = 'ServicePrincipal'
+if ($azd.INGESTION_STATE_RESOURCE_GROUP_NAME) {
+    $state.parameters.ingestionResourceGroupName.value = $azd.INGESTION_STATE_RESOURCE_GROUP_NAME
+}
+if ($azd.INGESTION_STATE_STORAGE_ACCOUNT_NAME) {
+    $state.parameters.storageAccountName.value = $azd.INGESTION_STATE_STORAGE_ACCOUNT_NAME
+}
+$stateLocation = $vnet.location
+$stateDeploymentName = "$($azd.AZURE_ENV_NAME)-ingestion-state"
+$json = $state | ConvertTo-Json -Depth 20
+if ($json -match '<[^>]+>') { throw 'State parameters still contain unfilled placeholders.' }
+New-Item -ItemType Directory -Force .\.local | Out-Null
+$path = Join-Path (Get-Location) '.local\state.parameters.json'
+$stream = [IO.File]::Open($path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+try {
+    $bytes = [Text.UTF8Encoding]::new($false).GetBytes($json + "`n")
+    $stream.Write($bytes, 0, $bytes.Length)
+} finally {
+    $stream.Dispose()
+}
+Write-Host 'Generated .local/state.parameters.json. No Azure resources were changed.'
+```
+
+Only allowlisted template inputs are written; the azd environment is never
+dumped to the file. The state account/endpoint location follows the actual VNet
+region, not an unrelated resource's region. Default retention/container settings
+come from the sample. Empty name overrides generate stable new names. For an
+existing state store with custom names, save the approved
+`INGESTION_STATE_RESOURCE_GROUP_NAME` and `INGESTION_STATE_STORAGE_ACCOUNT_NAME`
+in azd first so those identities are retained.
+
+The block refuses to overwrite an existing parameter file. Reuse an already
+reviewed file on reruns; do not silently replace its target or writer identity.
+Generation is read-only against Azure and does not deploy the state store.
+
+### Validate, preview and deploy
+
+In the same PowerShell session, validate and preview the generated file:
+
+```powershell
+az deployment sub validate --location $stateLocation --subscription $subscription `
   --template-file .\infra\ingestion-state.bicep --parameters .\.local\state.parameters.json
-az deployment sub what-if --location canadaeast --subscription <subscription> `
+if ($LASTEXITCODE -ne 0) { throw 'State deployment validation failed.' }
+az deployment sub what-if --location $stateLocation --subscription $subscription `
   --template-file .\infra\ingestion-state.bicep --parameters .\.local\state.parameters.json
-az deployment sub create --name <state-deployment> --location canadaeast `
-  --subscription <subscription> --template-file .\infra\ingestion-state.bicep `
+if ($LASTEXITCODE -ne 0) { throw 'State deployment preview failed.' }
+```
+
+Review the resolved target, writer and preview. **Only after explicit approval**
+run the deployment:
+
+```powershell
+az deployment sub create --name $stateDeploymentName --location $stateLocation `
+  --subscription $subscription --template-file .\infra\ingestion-state.bicep `
   --parameters .\.local\state.parameters.json
+if ($LASTEXITCODE -ne 0) { throw 'State deployment failed; preserve resources and inspect the error.' }
 ```
 
 The [state template](../../infra/ingestion-state.bicep) creates private LRS/Hot
