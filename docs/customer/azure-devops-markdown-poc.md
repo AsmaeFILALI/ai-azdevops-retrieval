@@ -178,9 +178,12 @@ Do not replace this staged process with an unattended `azd up`: application
 deployment requires the private connection and completed configuration.
 
 Follow the local [private-access procedure](private-access.md) to read the
-gateway/resolver outputs, import the customer VPN profile, connect and verify
-normal OS DNS, private routing and TLS for workload endpoints. Do not copy
-our VPN profile, resolver address or private endpoint IPs.
+gateway/resolver outputs, add the resolver and service DNS suffixes to the
+downloaded customer VPN profile, import/reconnect it and verify normal OS DNS,
+private routing and TLS. The gateway download alone can have an empty
+`clientconfig`; a successful direct-resolver query does not prove normal
+applications use it. Do not copy our full VPN profile, resolver address or
+private endpoint IPs.
 
 After connecting, apply the connected overlay and run the matching hook:
 

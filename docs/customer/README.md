@@ -17,6 +17,9 @@ Commands assume the repository root, not this documentation directory.
 Use the [customer profile](../../samples/customer-poc/azd-env.example.json) and
 [state-store example](../../samples/customer-poc/ingestion-state.parameters.example.json);
 replace placeholders in ignored local copies.
+The [VPN DNS configuration fragment](../../samples/customer-poc/vpn-clientconfig.example.xml)
+must be merged into the customer's downloaded full profile before import;
+see [private access](private-access.md#prepare-windows-split-dns-settings).
 
 ## What was in the other documentation repository?
 

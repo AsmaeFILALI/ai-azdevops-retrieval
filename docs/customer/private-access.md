@@ -36,30 +36,97 @@ Keep public access disabled; do not enable public endpoints as a workaround.
    ```
 
 3. Use the resulting gateway's Azure VPN configuration to generate/download the
-   **Azure VPN Client** profile. Import it into Azure VPN Client and sign in
-   with an authorized account in the customer's tenant.
-4. Configure that client's custom DNS server using the deployed resolver inbound
-   endpoint address. Use the approved VNet routes for the split tunnel.
-5. Verify the active VPN route and normal OS DNS. Never copy a developer's VPN
-   profile, resolver IP or old private endpoint addresses.
+   **Azure VPN Client** profile. Keep the original unchanged in a private local
+   location; do not commit it.
+4. **Before importing, prepare the DNS client configuration as described below.**
+   A generated profile can contain only `<clientconfig i:nil="true" />`; the
+   gateway download does not automatically include the deployment's private
+   resolver and workload DNS suffixes.
+5. Import the prepared full XML profile into Azure VPN Client, save it and sign
+   in with an authorized account in the customer's tenant. If a connection was
+   already imported, reimport/update that customer connection, then disconnect
+   and reconnect it. Editing the downloaded XML does not update an imported
+   connection.
+6. Verify the active VPN route and normal OS DNS. Never copy a developer's full
+   VPN profile, resolver IP or old private endpoint addresses. Do not connect
+   simultaneously to old/new POC VPNs that use the same address ranges.
 
 The template does not install/import the client or perform interactive sign-in.
 Do not create a second gateway in the same VNet. VPN authentication is separate
 from Azure CLI/azd login, application admission and document authorization.
 Treat exported VPN profiles and signed download URLs as private working data.
 
+### Prepare Windows split-DNS settings
+
+The [client configuration fragment](../../samples/customer-poc/vpn-clientconfig.example.xml)
+contains the service DNS suffixes for this public-Azure POC; it is **not** a
+complete VPN profile and cannot be imported on its own.
+
+1. Make a private local copy of the customer's downloaded full profile.
+2. Replace its whole `clientconfig` element (including `i:nil="true"` when
+   present) with the fragment. Keep it inside the existing `AzVpnProfile` root,
+   using the root's `http://schemas.datacontract.org/2004/07/` XML namespace.
+   Do not add a second `clientconfig` or leave the populated element marked nil.
+3. Replace `REPLACE_WITH_CUSTOMER_RESOLVER_IP` with **this deployment's**
+   `dnsServerAddress.value` from `pointToSiteVpnDeployment` outputs.
+   Do not use the gateway public IP, a private endpoint IP, a public DNS server
+   or Azure's VNet-only virtual DNS IP `168.63.129.16`.
+4. Preserve every other part of the downloaded profile, especially its gateway,
+   server validation, authentication, certificates, transport and route settings.
+   Import the full edited profile, not the fragment.
+
+`dnsserver` selects the private resolver; `dnssuffix` entries select the DNS
+namespaces to send through it. These are domain suffixes, **not an inventory
+of individual resource FQDNs**. For example `.azconfig.io` covers the new
+App Configuration hostname, `.vault.azure.net` covers the vault's normal
+hostname, and `.azurecontainerapps.io` covers the internal Container Apps
+domain. The fragment also covers Blob, Search, Cosmos, registry, Foundry/OpenAI
+and monitoring endpoints. Add approved private custom-domain suffixes if used;
+review the set for corporate DNS policy. Do not force all Internet DNS through
+the tunnel or configure default routes as a DNS workaround.
+
+The Bicep template creates the resolver and private zones/links, but does not
+edit a downloaded client profile or install Windows DNS policy. With Entra
+authentication, Azure VPN Client uses the Windows Name Resolution Policy Table
+(NRPT). `ipconfig /all` alone does not establish whether VPN DNS is configured.
+This procedure targets Windows; macOS suffix handling differs and requires
+separate validation.
+
 ## Verify DNS, routing and service access
 
 Use **actual outputs** from this environment, not values from another POC.
 Check App Configuration, Key Vault, Search, OpenAI, ACR and internal Container
-Apps hostnames. On Windows, for example:
+Apps hostnames. Compare direct-resolver DNS with normal Windows resolution:
 
 ```powershell
-Resolve-DnsName <service-hostname>
+$hostnameToCheck = '<service-hostname>'
+$resolverAddress = '<dnsServerAddress-from-customer-deployment>'
+
+# First prove that the private resolver is reachable and has the private records.
+Resolve-DnsName $hostnameToCheck -Server $resolverAddress -Type A -DnsOnly
+
+# Then prove that normal applications will select the VPN DNS policy.
+Get-DnsClientNrptPolicy -Effective |
+    Select-Object Namespace, NameServers
+Resolve-DnsName $hostnameToCheck -Type A -DnsOnly
 Test-NetConnection <service-hostname> -Port 443
 ```
 
 Expect the private DNS chain to resolve to the correct workload private address.
+Both lookups must match the intended private endpoint; a direct `-Server`
+success alone does not validate normal application DNS.
+
+| Observation | Next check |
+| --- | --- |
+| Direct resolver returns private IP; normal lookup returns public IP or fails | Missing/stale client `dnsservers`/`dnssuffixes`, missing effective NRPT rules or conflicting corporate policy; reimport/reconnect the correct profile and retest |
+| Direct resolver times out | VPN connection, route to the resolver subnet and DNS reachability; suffixes alone cannot fix routing |
+| Direct resolver returns public IP or no record | Resolver's VNet, private-zone links/records and correct customer resource hostname |
+| Both return private IP but HTTPS fails | Private endpoint/routing, TLS and then the actual caller's data-plane permissions |
+
+Use the normal hostname, not a hardcoded private IP or hosts-file entry. If a
+previous public response is cached, clear the local DNS cache after reconnecting
+and retest according to the workstation's policy. Do not change global DNS or
+manually add machine-wide NRPT rules to hide an incomplete imported profile.
 A TCP connection is only a network check: follow it with authenticated HTTPS
 operations using the approved customer identity. Do not bypass TLS validation,
 use fabricated identity headers or grant broad permissions to mask a 403.

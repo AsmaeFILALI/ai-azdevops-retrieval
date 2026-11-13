@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import re
 from urllib.parse import unquote, urlsplit
+from xml.etree import ElementTree
 
 import pytest
 
@@ -53,6 +54,7 @@ def test_readme_uses_local_customer_entrypoint():
     for relative in (
         "samples/customer-poc/azd-env.example.json",
         "samples/customer-poc/ingestion-state.parameters.example.json",
+        "samples/customer-poc/vpn-clientconfig.example.xml",
         "infra/ingestion-state.bicep",
     ):
         assert f"]({relative})" in readme
@@ -86,3 +88,32 @@ def test_documented_markdown_target_matches_profile():
         "FOUNDRY_IQ_SEARCH_INDEX_NAME", "FOUNDRY_IQ_SEMANTIC_CONFIGURATION_NAME",
     ):
         assert f"{name}={profile[name]}" in configuration
+
+
+def test_vpn_dns_fragment_has_resolver_placeholder_and_service_suffixes():
+    namespace = "{http://schemas.datacontract.org/2004/07/}"
+    fragment = ElementTree.parse(ROOT / "samples/customer-poc/vpn-clientconfig.example.xml").getroot()
+    assert fragment.tag == f"{namespace}clientconfig"
+    assert "{http://www.w3.org/2001/XMLSchema-instance}nil" not in fragment.attrib
+    servers = fragment.findall(f"{namespace}dnsservers/{namespace}dnsserver")
+    assert [server.text for server in servers] == ["REPLACE_WITH_CUSTOMER_RESOLVER_IP"]
+    suffixes = [item.text for item in fragment.findall(f"{namespace}dnssuffixes/{namespace}dnssuffix")]
+    assert len(suffixes) == len(set(suffixes))
+    assert set(suffixes) == {
+        ".vault.azure.net", ".vaultcore.azure.net", ".azconfig.io", ".search.windows.net",
+        ".documents.azure.com", ".blob.core.windows.net", ".azurecr.io",
+        ".openai.azure.com", ".services.ai.azure.com", ".cognitiveservices.azure.com",
+        ".azurecontainerapps.io", ".monitor.azure.com", ".opinsights.azure.com",
+        ".applicationinsights.io", ".azure.automation.net",
+    }
+
+
+def test_private_access_requires_suffixes_reimport_and_normal_dns_validation():
+    guide = (DOCS / "private-access.md").read_text(encoding="utf-8")
+    for required in (
+        "vpn-clientconfig.example.xml", "i:nil", "dnssuffix", "dnsserver",
+        "reimport", "Get-DnsClientNrptPolicy -Effective",
+        "Resolve-DnsName $hostnameToCheck -Server $resolverAddress",
+        "Resolve-DnsName $hostnameToCheck -Type A",
+    ):
+        assert required in guide

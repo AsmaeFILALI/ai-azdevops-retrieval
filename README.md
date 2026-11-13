@@ -87,6 +87,7 @@ For this customer POC, use the [repository-local documentation](docs/customer/RE
 Deployment inputs and the separate pipeline state-store template:
 
 - [Customer azd environment profile](samples/customer-poc/azd-env.example.json)
+- [VPN client DNS configuration fragment](samples/customer-poc/vpn-clientconfig.example.xml)
 - [Ingestion state-store parameters](samples/customer-poc/ingestion-state.parameters.example.json)
 - [Ingestion state-store Bicep template](infra/ingestion-state.bicep)
 
