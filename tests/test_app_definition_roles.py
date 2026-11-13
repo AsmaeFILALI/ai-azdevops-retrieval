@@ -40,6 +40,15 @@ RESOURCES = {
     "Microsoft.DocumentDB/databaseAccounts": [{"name": "cosmos-x", "id": COSMOS}],
 }
 SERVICES = {"frontend": "p-ui", "orchestrator": "p-orch", "dataingest": "p-ing"}
+RESOURCE_LIST_COMMANDS = {
+    ("appconfig", "list"): "Microsoft.AppConfiguration/configurationStores",
+    ("acr", "list"): "Microsoft.ContainerRegistry/registries",
+    ("keyvault", "list"): "Microsoft.KeyVault/vaults",
+    ("cognitiveservices", "account", "list"): "Microsoft.CognitiveServices/accounts",
+    ("search", "service", "list"): "Microsoft.Search/searchServices",
+    ("storage", "account", "list"): "Microsoft.Storage/storageAccounts",
+    ("cosmosdb", "list"): "Microsoft.DocumentDB/databaseAccounts",
+}
 
 
 class FakeAz:
@@ -54,8 +63,10 @@ class FakeAz:
         self.calls.append(arguments)
         head = arguments[:3]
         if head[:2] == ["resource", "list"]:
-            kind = arguments[arguments.index("--resource-type") + 1]
-            return json.dumps(RESOURCES[kind])
+            return "[]"
+        for command, kind in RESOURCE_LIST_COMMANDS.items():
+            if tuple(arguments[:len(command)]) == command:
+                return json.dumps(RESOURCES[kind])
         if head[:2] == ["containerapp", "list"]:
             query = arguments[arguments.index("--query") + 1]
             service = query.split("=='", 1)[1].split("'", 1)[0]
@@ -90,6 +101,63 @@ def bundled():
 
 
 class RoleAssignmentTests(unittest.TestCase):
+    def test_scopes_use_provider_inventory_when_generic_inventory_is_empty(self):
+        cases = {
+            "appConfiguration": "Microsoft.AppConfiguration/configurationStores",
+            "containerRegistry": "Microsoft.ContainerRegistry/registries",
+            "keyVault": "Microsoft.KeyVault/vaults",
+            "aiFoundryAccount": "Microsoft.CognitiveServices/accounts",
+            "searchService": "Microsoft.Search/searchServices",
+            "storageAccount": "Microsoft.Storage/storageAccounts",
+            "cosmosDbAccount": "Microsoft.DocumentDB/databaseAccounts",
+        }
+        for scope, kind in cases.items():
+            with self.subTest(scope=scope):
+                az = FakeAz()
+                self.assertEqual(RESOURCES[kind][0]["id"], resolve_scope(scope, CONTEXT, RG, az))
+                command = next(command for command, resource_type in RESOURCE_LIST_COMMANDS.items() if resource_type == kind)
+                self.assertEqual(1, len(az.calls))
+                self.assertEqual(
+                    [*command, "--subscription", CONTEXT["AZURE_SUBSCRIPTION_ID"],
+                     "--resource-group", RG, "--output", "json", "--only-show-errors"],
+                    az.calls[0],
+                )
+
+    def test_app_config_provider_inventory_keeps_exact_endpoint_binding(self):
+        kind = "Microsoft.AppConfiguration/configurationStores"
+        expected = RESOURCES[kind][0]["id"]
+        stores = [
+            {"name": "appcs-other", "id": f"{SUB}/{kind}/appcs-other"},
+            {"name": "appcs-x", "id": expected},
+        ]
+        with patch.dict(RESOURCES, {kind: stores}):
+            self.assertEqual(
+                expected,
+                resolve_scope("appConfiguration", {
+                    **CONTEXT, "APP_CONFIG_ENDPOINT": "https://appcs-x.azconfig.io",
+                }, RG, FakeAz()),
+            )
+            with self.assertRaisesRegex(RoleAssignmentError, "found 0"):
+                resolve_scope("appConfiguration", {
+                    **CONTEXT, "APP_CONFIG_ENDPOINT": "https://appcs-missing.azconfig.io",
+                }, RG, FakeAz())
+            with self.assertRaisesRegex(RoleAssignmentError, "different or missing deployment subscription"):
+                resolve_scope("appConfiguration", {
+                    **CONTEXT, "APP_CONFIG_RESOURCE_ID": expected.replace("/0000/", "/9999/"),
+                }, RG, FakeAz())
+
+    def test_provider_discovery_error_prevents_role_writes(self):
+        az = FakeAz()
+
+        def denied(arguments, *, required=True):
+            if arguments[:2] == ["appconfig", "list"]:
+                raise RuntimeError("AuthorizationFailed: App Configuration read denied")
+            return az(arguments, required=required)
+
+        with self.assertRaisesRegex(RuntimeError, "AuthorizationFailed"):
+            assign_roles(bundled(), CONTEXT, hosted_orchestration=False, run_az=denied)
+        self.assertEqual([], az.creates())
+
     def test_key_vault_scope_uses_foundation_name_without_guessing(self):
         vaults = [{"name": "kv-app", "id": f"{SUB}/Microsoft.KeyVault/vaults/kv-app"}, {"name": "kv-foundry", "id": f"{SUB}/Microsoft.KeyVault/vaults/kv-foundry"}]
         with patch.dict(RESOURCES, {"Microsoft.KeyVault/vaults": vaults}):
