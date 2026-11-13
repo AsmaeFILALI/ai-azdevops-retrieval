@@ -5,7 +5,8 @@ Runs in ``postProvision`` through ``python -m config.appdefinition
 definition, it expands the component profiles with
 :func:`~config.appdefinition.profiles.expand_profiles`, resolves the component
 Container App identity by its ``azd-service-name`` tag, resolves each scope to
-the single matching resource across the workload destinations, and creates only the
+the single matching resource using provider-specific inventories across the
+workload destinations, and creates only the
 assignments that do not already exist (directly or inherited). Re-runs converge.
 Custom hosted components use the same profile reconciliation after deployment,
 with an instance identity verified by :mod:`config.deployment.hosted_access`.
@@ -53,6 +54,7 @@ COSMOS_DATA_ROLES = frozenset({"CosmosDBBuiltInDataContributor", "CosmosDBBuiltI
 @dataclass(frozen=True)
 class ScopeSpec:
     resource_type: str
+    list_command: tuple[str, ...]
     #: azd environment values naming the resource, in preference order. URLs
     #: are reduced to their first host label (for example ``<name>.vault.azure.net``).
     name_sources: tuple[str, ...]
@@ -61,22 +63,34 @@ class ScopeSpec:
 
 
 SCOPES: dict[str, ScopeSpec] = {
-    SCOPE_APP_CONFIG: ScopeSpec("Microsoft.AppConfiguration/configurationStores", ("APP_CONFIG_ENDPOINT",)),
+    SCOPE_APP_CONFIG: ScopeSpec(
+        "Microsoft.AppConfiguration/configurationStores", ("appconfig", "list"), ("APP_CONFIG_ENDPOINT",),
+    ),
     SCOPE_CONTAINER_REGISTRY: ScopeSpec(
-        "Microsoft.ContainerRegistry/registries",
+        "Microsoft.ContainerRegistry/registries", ("acr", "list"),
         ("AZURE_CONTAINER_REGISTRY_NAME", "AZURE_CONTAINER_REGISTRY_ENDPOINT"),
     ),
     SCOPE_KEY_VAULT: ScopeSpec(
-        "Microsoft.KeyVault/vaults",
+        "Microsoft.KeyVault/vaults", ("keyvault", "list"),
         ("AZURE_KEY_VAULT_NAME", "KEY_VAULT_NAME", "KEY_VAULT_URI", "AZURE_KEY_VAULT_ENDPOINT"),
     ),
     SCOPE_FOUNDRY_ACCOUNT: ScopeSpec(
-        "Microsoft.CognitiveServices/accounts", ("AI_FOUNDRY_ACCOUNT_NAME", "AZURE_AI_ACCOUNT_NAME")
+        "Microsoft.CognitiveServices/accounts", ("cognitiveservices", "account", "list"),
+        ("AI_FOUNDRY_ACCOUNT_NAME", "AZURE_AI_ACCOUNT_NAME"),
     ),
-    SCOPE_SEARCH: ScopeSpec("Microsoft.Search/searchServices", ("SEARCH_SERVICE_NAME", "SEARCH_SERVICE_ENDPOINT")),
+    SCOPE_SEARCH: ScopeSpec(
+        "Microsoft.Search/searchServices", ("search", "service", "list"),
+        ("SEARCH_SERVICE_NAME", "SEARCH_SERVICE_ENDPOINT"),
+    ),
     # The Foundry account storage ("staif...") is never an application data store.
-    SCOPE_STORAGE: ScopeSpec("Microsoft.Storage/storageAccounts", ("AZURE_STORAGE_ACCOUNT_NAME", "STORAGE_ACCOUNT_NAME"), ("staif",)),
-    SCOPE_COSMOS: ScopeSpec("Microsoft.DocumentDB/databaseAccounts", ("AZURE_COSMOS_DB_NAME", "COSMOS_DB_ENDPOINT")),
+    SCOPE_STORAGE: ScopeSpec(
+        "Microsoft.Storage/storageAccounts", ("storage", "account", "list"),
+        ("AZURE_STORAGE_ACCOUNT_NAME", "STORAGE_ACCOUNT_NAME"), ("staif",),
+    ),
+    SCOPE_COSMOS: ScopeSpec(
+        "Microsoft.DocumentDB/databaseAccounts", ("cosmosdb", "list"),
+        ("AZURE_COSMOS_DB_NAME", "COSMOS_DB_ENDPOINT"),
+    ),
 }
 SCOPE_ID_SOURCES = {
     SCOPE_APP_CONFIG: ("APP_CONFIG_RESOURCE_ID",),
@@ -173,8 +187,8 @@ def resolve_scope(scope: str, environment: Mapping[str, str], resource_group: st
     items = []
     for group in groups:
         rows = _json(run_az, [
-            "resource", "list", "--subscription", subscription,
-            "--resource-group", group, "--resource-type", spec.resource_type,
+            *spec.list_command, "--subscription", subscription,
+            "--resource-group", group,
         ])
         if not isinstance(rows, list):
             raise RoleAssignmentError("Resource discovery must return a JSON array.")
