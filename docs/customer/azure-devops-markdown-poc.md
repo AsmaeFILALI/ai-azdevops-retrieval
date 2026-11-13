@@ -165,8 +165,10 @@ application and resource destinations, resolves topology and generates
 infrastructure parameters. Do not edit the generated file as the durable input.
 Check permissions, regional model capacity and network policy before applying.
 
-The bootstrap overlay deliberately defers post-provision data-plane setup
-because the VPN does not exist yet:
+The profile's `bootstrap` group contains initial azd settings that deliberately
+defer private service configuration because the VPN does not exist yet.
+"Overlay" means applying that group of saved settings to the selected environment,
+not an automatic connection or infrastructure operation:
 
 ```powershell
 azd provision --no-prompt
@@ -185,21 +187,35 @@ private routing and TLS. The gateway download alone can have an empty
 applications use it. Do not copy our full VPN profile, resolver address or
 private endpoint IPs.
 
-After connecting, apply the connected overlay and run the matching hook:
+**After connecting the VPN and verifying normal private DNS, resume the service
+configuration skipped during provisioning. Do this before application deployment,
+not at the end.** Connecting the VPN does not update saved azd settings.
+
+The profile's `connected` group changes `RUN_FROM_JUMPBOX` from `false` to `true`
+and `AZURE_SKIP_NETWORK_ISOLATION_WARNING` from `true` to `false`. The first
+setting has a misleading legacy name: your VPN-connected laptop is supported;
+it does not create or require a jumpbox. The second clears the legacy warning-skip
+deferral. Neither setting connects the VPN or bypasses connectivity checks.
+Leaving the bootstrap values in place makes the hook defer again rather than
+complete service setup.
+
+With the intended customer environment selected, save the two values explicitly
+and run the hook from the repository root:
 
 ```powershell
-$profile = Get-Content -Raw .\.local\customer.json | ConvertFrom-Json
-foreach ($entry in $profile.connected.PSObject.Properties) {
-    azd env set $entry.Name $entry.Value --no-prompt
-    if ($LASTEXITCODE -ne 0) { throw "Cannot set $($entry.Name)." }
-}
+azd env set RUN_FROM_JUMPBOX true
+if ($LASTEXITCODE -ne 0) { throw 'Cannot clear post-provision deferral.' }
+azd env set AZURE_SKIP_NETWORK_ISOLATION_WARNING false
+if ($LASTEXITCODE -ne 0) { throw 'Cannot clear legacy warning deferral.' }
 pwsh -NoProfile -File .\scripts\postProvision.ps1
 ```
 
-On Bash hosts use `bash ./scripts/postProvision.sh`. The hook configures roles,
-governance/Key Vault, App Configuration, model/service references, the Markdown
-index and knowledge objects. It can reconcile platform-owned objects: do not
-run it against unrelated serving resources as a generic repair step.
+On Bash hosts set the same two azd values, checking each command succeeds, then
+use `bash ./scripts/postProvision.sh`. The hook configures roles, governance/Key
+Vault, App Configuration, model/service references, the Markdown index and
+knowledge objects; it does not reprovision the entire infrastructure.
+It can reconcile platform-owned objects: do not run it against unrelated serving
+resources as a generic repair step.
 
 Verify `AGENT_STRATEGY=maf_lite` and `CHAT_BACKEND=orchestrator` under `agent-lz`,
 the exact index/model/vectorizer, `semantic-config`, and source-data projection

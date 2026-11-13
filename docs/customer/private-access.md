@@ -12,16 +12,20 @@ overlap with corporate/local networks, approve ongoing costs and authorize
 VPN users. The deployment identity needs the approved network/resource/DNS
 permissions; a VPN user does not need infrastructure write permissions.
 
-Use the profile's bootstrap overlay:
+Before the VPN exists, use the customer profile's `bootstrap` settings.
+Here, an "overlay" means a group of settings saved in the selected azd
+environment; it is not an automatic VPN action:
 
 ```text
 RUN_FROM_JUMPBOX=false
 AZURE_SKIP_NETWORK_ISOLATION_WARNING=true
 ```
 
-This explicitly defers service data-plane configuration while the private path
-is unavailable. Despite its legacy name, `RUN_FROM_JUMPBOX` also controls the
-connected-workstation path. Deferral is not application readiness.
+These settings let infrastructure provisioning finish while deliberately
+skipping service configuration that needs access to private endpoints.
+Despite its legacy name, `RUN_FROM_JUMPBOX` also controls a laptop connected
+through VPN; this profile does not require or deploy a jumpbox.
+Deferral is not application readiness.
 Keep public access disabled; do not enable public endpoints as a workaround.
 
 ## Connect the template-managed VPN
@@ -139,18 +143,40 @@ DNS-zone links alone do not configure a laptop's resolver or VPN routes.
 
 ## Finish connected configuration
 
-Apply the profile's connected overlay:
+**Do this after connecting the VPN and verifying normal private DNS, but before
+application deployment.** Resume the service configuration skipped during
+initial provisioning; this is not an optional step at the end of deployment.
 
-```text
-RUN_FROM_JUMPBOX=true
-AZURE_SKIP_NETWORK_ISOLATION_WARNING=false
+| Phase | Saved azd settings | Effect |
+| --- | --- | --- |
+| Before VPN access | `RUN_FROM_JUMPBOX=false`, `AZURE_SKIP_NETWORK_ISOLATION_WARNING=true` | Defer private service configuration while provisioning the foundation |
+| After VPN/DNS verification | `RUN_FROM_JUMPBOX=true`, `AZURE_SKIP_NETWORK_ISOLATION_WARNING=false` | Clear the bootstrap deferral and check connectivity before configuring services |
+
+`RUN_FROM_JUMPBOX=true` does **not** create a jumpbox or connect the VPN.
+`AZURE_SKIP_NETWORK_ISOLATION_WARNING=false` clears the legacy warning-skip
+deferral setting. Neither value bypasses the private-connectivity checks.
+Connecting Windows VPN does not update saved azd values automatically. If the
+bootstrap values remain, post-provisioning exits as deferred without completing
+service configuration.
+
+From the repository root, with the intended customer azd environment selected:
+
+```powershell
+azd env set RUN_FROM_JUMPBOX true
+if ($LASTEXITCODE -ne 0) { throw 'Cannot clear post-provision deferral.' }
+azd env set AZURE_SKIP_NETWORK_ISOLATION_WARNING false
+if ($LASTEXITCODE -ne 0) { throw 'Cannot clear legacy warning deferral.' }
+pwsh -NoProfile -File .\scripts\postProvision.ps1
 ```
 
-Then run `pwsh -NoProfile -File .\scripts\postProvision.ps1` from the repository
-root, or `bash ./scripts/postProvision.sh` on Bash hosts. The hook loads the
-selected azd environment and checks private-network prerequisites before
-data-plane configuration. Fix reported failures; do not interpret a deferred
-or failed hook as completed setup.
+These are the two values in the customer profile's `connected` group. On Bash
+hosts, set the same two azd values, checking each command succeeds, then run
+`bash ./scripts/postProvision.sh` instead of the PowerShell hook.
+The hook loads the selected environment, verifies private-network prerequisites,
+and completes configuration such as App Configuration, Key Vault and the Search
+index/knowledge objects. It does not rerun the entire infrastructure deployment.
+Fix reported failures; do not interpret a deferred or failed hook as completed
+setup.
 
 After completing [application authentication](application-auth.md), run
 `azd deploy` from the connected host. Local builds require healthy Docker,
