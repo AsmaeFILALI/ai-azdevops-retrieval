@@ -947,7 +947,10 @@ def execute_setup(defs: Optional[dict], context: dict):
         raise RuntimeError("No search definitions were rendered; aborting Azure Search setup")
     validate_unique_knowledge_source_names(defs)
     schema = search_public_settings(context)[SCHEMA_SETTING]
-    cred = ChainedTokenCredential(AzureCliCredential(),ManagedIdentityCredential())
+    cred = ChainedTokenCredential(
+        AzureCliCredential(process_timeout=30),
+        ManagedIdentityCredential(process_timeout=30),
+    )
     indexers = defs.get("indexers", [])
     ds_to_indexers = {}
     for ix in indexers:
