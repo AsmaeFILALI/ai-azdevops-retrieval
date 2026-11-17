@@ -12,24 +12,37 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.parametrize("shell", ["pwsh", "bash"])
+@pytest.mark.parametrize("registry_url", ["https://packages.example.invalid/", ""])
 @pytest.mark.parametrize("invalid", [None, {}, [], {"BAD-KEY": "value"}, {"KEY": 1}, {"KEY": "\0"}])
-def test_deploy_environment_roundtrip_and_fail_closed(tmp_path, shell, invalid):
+def test_deploy_environment_roundtrip_and_fail_closed(tmp_path, shell, registry_url, invalid):
     values = {
         "HOSTED_AGENT_DEPLOYMENT": json.dumps({"foundry": {"projectEndpoint": "https://example.invalid/a?x=y"}}),
         "QUOTED": 'a "quote", backslash \\ and = sign',
         "MULTILINE": "first\nsecond\n",
         "EMPTY": "",
         "LITERAL": "$(never-execute); $HOME",
+        "PIP_INDEX_URL": registry_url,
+        "NPM_CONFIG_REGISTRY": registry_url,
+        "BUILD_MODE": "local",
     }
     payload = values if invalid is None else invalid
-    environment = {**os.environ, "FAKE_VALUES": json.dumps(payload), "REAL_PYTHON": subprocess.sys.executable}
+    environment = {
+        **os.environ,
+        "FAKE_VALUES": json.dumps(payload),
+        "REAL_PYTHON": subprocess.sys.executable,
+        "PIP_INDEX_URL": "https://stale.example.invalid/simple/",
+        "NPM_CONFIG_REGISTRY": "https://stale.example.invalid/npm/",
+    }
     if shell == "pwsh":
         source = (ROOT / "scripts" / "preDeploy.ps1").read_text(encoding="utf-8-sig")
         snippet = source[source.index("function Get-AzdEnv"):source.index("function ResourceGroup-Exists")]
+        propagation = source[source.index("$globalEnv  = Get-AzdEnv"):source.index("# Foundation guard")]
         script = tmp_path / "load.ps1"
         script.write_text(
-            "function azd { $global:LASTEXITCODE = 0; return $env:FAKE_VALUES }\n"
-            + snippet + "\nGet-AzdEnv '.' | ConvertTo-Json -Compress\n", encoding="utf-8",
+            "$repoRoot='.'\nfunction azd { $global:LASTEXITCODE = 0; return $env:FAKE_VALUES }\n"
+            + snippet + "\n" + propagation
+            + '\n& $env:REAL_PYTHON -c "import json, os; print(json.dumps({k: os.environ.get(k, \'\') for k in '
+            + repr(list(values)) + '}))"\n', encoding="utf-8",
         )
         command = [shutil.which("pwsh"), "-NoProfile", "-File", str(script)]
     else:

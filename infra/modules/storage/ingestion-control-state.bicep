@@ -7,6 +7,9 @@ import * as const from '../../constants/constants.bicep'
 @maxLength(24)
 param name string
 
+@description('Environment binding for the integrated deployment handoff.')
+param environmentName string = ''
+
 @description('Account/private endpoint region; must match the existing endpoint subnet.')
 param location string
 
@@ -25,6 +28,9 @@ param writerPrincipalId string
 @description('Writer principal type.')
 @allowed(['ServicePrincipal', 'User', 'Group'])
 param writerPrincipalType string
+
+@description('Legacy standalone writer grant. The integrated azd path sets false and reconciles this grant during post-provision.')
+param assignWriterRole bool = true
 
 @description('Blob and container soft-delete recovery window in days.')
 @minValue(1)
@@ -78,7 +84,7 @@ module account 'br/public:avm/res/storage/storage-account:0.26.2' = {
 var containerResourceId = '${account.outputs.resourceId}/blobServices/default/containers/${containerName}'
 var writerRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', const.roles.StorageBlobDataContributor.guid)
 
-module writerRole '../security/resource-role-assignment.bicep' = {
+module writerRole '../security/resource-role-assignment.bicep' = if (assignWriterRole) {
   name: 'ingestionStateWriter'
   params: {
     name: name
@@ -110,7 +116,7 @@ module endpoint '../networking/private-endpoint.bicep' = {
         }
       }
     ]
-    privateDnsZoneGroup: {
+    privateDnsZoneGroup: empty(blobPrivateDnsZoneResourceId) ? null : {
       name: 'default'
       privateDnsZoneGroupConfigs: [
         {
@@ -133,4 +139,18 @@ output containerResourceId string = containerResourceId
 @description('Private Blob endpoint ARM ID.')
 output privateEndpointResourceId string = endpoint.outputs.resourceId
 @description('Container-scoped writer role-assignment ARM ID.')
-output writerRoleAssignmentResourceId string = extensionResourceId(containerResourceId, 'Microsoft.Authorization/roleAssignments', guid(writerPrincipalId, writerRoleDefinitionId, containerResourceId))
+output writerRoleAssignmentResourceId string = assignWriterRole ? extensionResourceId(containerResourceId, 'Microsoft.Authorization/roleAssignments', guid(writerPrincipalId, writerRoleDefinitionId, containerResourceId)) : ''
+
+@description('Nonsecret worker bindings. Writer authorization and live access are verified separately after provisioning.')
+output ingestionState object = {
+  environmentName: environmentName
+  resourceGroupName: resourceGroup().name
+  storageAccountName: account.outputs.name
+  storageAccountResourceId: account.outputs.resourceId
+  blobEndpoint: account.outputs.primaryBlobEndpoint
+  containerName: containerName
+  containerResourceId: containerResourceId
+  privateEndpointResourceId: endpoint.outputs.resourceId
+  writerPrincipalId: writerPrincipalId
+  writerPrincipalType: writerPrincipalType
+}

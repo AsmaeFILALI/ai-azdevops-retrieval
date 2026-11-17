@@ -61,6 +61,10 @@ The equal index names are required, not interchangeable overrides.
   rendered schema/hash and validates the target. `--apply` conditionally creates
   only a missing named index. It does not reconcile knowledge objects, publish
   configuration or delete/recreate an existing index.
+- For the ingestion pipeline, follow the runbook's
+  [environment-based schema export](azure-devops-markdown-poc.md#generate-the-ingestion-index-schema-from-the-azd-environment).
+  Transfer the rendered `.schema.json` and matching `.schema.json.sha256`,
+  not the consumer contract, Jinja template or environment file.
 - Full post-provisioning also reconciles knowledge objects; do not use it just
   to create an unrelated test index. For incompatible schema changes use a
   reviewed new generation/cutover, not destructive repair.
@@ -103,9 +107,15 @@ The customer profile selects `BUILD_MODE=local` and disables the ACR Tasks
 agent pool. Use healthy Linux/amd64 Docker on a host connected to the private
 registry. This does not make package-download egress unnecessary.
 
+- Save `PIP_INDEX_URL` and/or `NPM_CONFIG_REGISTRY` in the selected root azd
+  environment or the customer profile's optional inputs. See the runbook's
+  [registry setup and reset commands](azure-devops-markdown-poc.md#configure-package-registries-before-building).
 - UI accepts a local-build `PIP_INDEX_URL` override.
 - Orchestrator accepts local-build `PIP_INDEX_URL` and `NPM_CONFIG_REGISTRY`.
-- These overrides do not change ACR Task builds or dependency versions.
+- With either override set, the parent requires explicit `BUILD_MODE=local`;
+  the pinned ACR Task paths do not forward these settings. Dependency versions
+  are unchanged. Empty optional profile values preserve defaults for a new
+  environment, not removal of saved or inherited overrides.
 - Only credential-free HTTPS URLs without user information, query strings or
   fragments are accepted. Authenticated feeds require a separately reviewed
   build-secret mechanism. Never disable TLS to bypass download failures.
@@ -118,19 +128,31 @@ registry. This does not make package-download egress unnecessary.
 
 ## Pipeline and state ownership
 
-The platform deploys the separate [control-state store](../../infra/ingestion-state.bicep)
-only when explicitly invoked through Azure CLI. It grants the supplied writer
-container-scoped Storage Blob Data Contributor, not Search/inference permissions.
-It creates no Markdown staging source or Search indexer.
+The customer profile enables `DEPLOY_INGESTION_STATE_STORE=true`.
+The [root template](../../infra/main.bicep) automatically deploys the dedicated
+private control-state account/container and endpoint in the **application
+resource group** during `azd provision`. The
+[post-provision state module](../../config/deployment/ingestion_state.py) verifies
+the approved writer and exact resources, then reconciles container-scoped
+Storage Blob Data Contributor. It grants no Search/inference or application
+identity permissions and creates no Markdown staging source or Search indexer.
 
-Step 5 of the [deployment runbook](azure-devops-markdown-poc.md#5-deploy-the-independent-control-state-store)
-generates the state parameter file from selected azd values and read-only
-network/DNS queries; no manual JSON edits or resource-ID copying is required.
-`INGESTION_STATE_WRITER_PRINCIPAL_ID` must be the explicitly approved worker
-service-principal object ID. Optional `INGESTION_STATE_RESOURCE_GROUP_NAME` and
-`INGESTION_STATE_STORAGE_ACCOUNT_NAME` preserve custom existing state names.
-These are operator-only azd metadata for parameter generation, not runtime
-settings or automatic inputs to `azd provision`.
+Step 5 of the [deployment runbook](azure-devops-markdown-poc.md#5-integrated-control-state-store-and-worker-identity)
+explains creating the Azure DevOps WIF service connection and resolving its
+service-principal **object ID** for `INGESTION_STATE_WRITER_PRINCIPAL_ID`.
+The connection uses the application/client ID, but RBAC uses the enterprise
+application/service-principal object ID. These IDs are not interchangeable.
+
+Optional inputs are `INGESTION_STATE_STORAGE_ACCOUNT_NAME`,
+`INGESTION_STATE_CONTAINER_NAME` (default `ingestion-state`) and
+`INGESTION_STATE_SOFT_DELETE_RETENTION_DAYS` (default `14`, range `1..365`).
+They are operator-only azd inputs, not App Configuration runtime keys.
+General deployments default this feature off. A legacy
+`INGESTION_STATE_RESOURCE_GROUP_NAME` pointing outside `AZURE_RESOURCE_GROUP`
+fails validation: existing state is never moved, copied or deleted implicitly.
+Bootstrap deferral postpones writer roles until connected post-provision.
+Existing ancestor RBAC is not revoked, and writer rotation requires an explicit
+review of old grants.
 
 The independent worker owns document synchronization, embeddings, leases,
 run intents and checkpoints. Its schema-read, document-write, inference, state,

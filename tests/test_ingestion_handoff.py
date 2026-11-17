@@ -82,6 +82,42 @@ def test_customer_bindings_and_api_version_are_derived_from_exact_snapshots(inpu
     assert result["serving_status"] == "serving"
 
 
+@pytest.fixture
+def integrated_inputs(inputs):
+    platform, state, _ = inputs
+    store = state["properties"]["outputs"]["ingestionState"]["value"]
+    store["resourceGroupName"] = "customer"
+    platform["properties"]["outputs"]["AZURE_RESOURCE_GROUP"] = {"value": "customer"}
+    platform["properties"]["parameters"].update({
+        "deployIngestionStateStore": {"value": True},
+        "ingestionStateWriterPrincipalId": {"value": store["writerPrincipalId"]},
+    })
+    return inputs
+
+
+def test_integrated_module_snapshot_preserves_the_worker_handoff_contract(integrated_inputs):
+    result = build(integrated_inputs)
+    assert result["publishing"]["state_container"] == "ingestion-state"
+    assert result["resources"]["state_writer_principal_type"] == "ServicePrincipal"
+
+
+@pytest.mark.parametrize("case", ["wrong-group", "foreign-account", "wrong-writer", "user-writer"])
+def test_integrated_handoff_rejects_stale_standalone_or_wrong_writer_snapshots(integrated_inputs, case):
+    platform, state, schema = integrated_inputs
+    store = state["properties"]["outputs"]["ingestionState"]["value"]
+    if case == "wrong-group":
+        store["resourceGroupName"] = "old-ingestion"
+    elif case == "foreign-account":
+        store["storageAccountResourceId"] = store["storageAccountResourceId"].replace("/customer/", "/old-ingestion/")
+        store["containerResourceId"] = store["containerResourceId"].replace("/customer/", "/old-ingestion/")
+    elif case == "wrong-writer":
+        platform["properties"]["parameters"]["ingestionStateWriterPrincipalId"]["value"] = TENANT
+    else:
+        store["writerPrincipalType"] = "User"
+    with pytest.raises(ValueError):
+        build((platform, state, schema))
+
+
 def test_secret_bearing_extra_snapshot_fields_are_not_exported(inputs):
     inputs[0]["properties"]["outputs"]["password"] = {"value": "never-export-this"}
     inputs[1]["properties"]["outputs"]["ingestionState"]["value"]["accountKey"] = "never-export-this"

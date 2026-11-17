@@ -14,7 +14,7 @@ from config.deployment.composition import compose_parameters
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_root_and_tracked_seed_are_the_same_portable_inputs():
+def test_root_preserves_portable_legacy_seed_inputs():
     root = json.loads((ROOT / "main.parameters.json").read_text(encoding="utf-8"))
     location = subprocess.run(
         ["git", "-C", str(ROOT), "rev-parse", "--show-toplevel"],
@@ -26,7 +26,8 @@ def test_root_and_tracked_seed_are_the_same_portable_inputs():
         ["git", "-C", str(ROOT), "show", "HEAD:infra/main.parameters.json"],
         text=True, encoding="utf-8",
     ))
-    assert root == seed
+    assert root["contentVersion"] == seed["contentVersion"]
+    assert all(root["parameters"].get(name) == value for name, value in seed["parameters"].items())
     assert root["parameters"]["dbAccountName"]["value"] == "${COSMOS_ACCOUNT_NAME=}"
 
 
@@ -47,7 +48,7 @@ def test_seed_contract_survives_normal_preprovision_generation(tmp_path, monkeyp
     assert generated != source
     (checkout / "infra/main.parameters.json").write_text(json.dumps(generated), encoding="utf-8")
     monkeypatch.setattr(sys.modules[__name__], "ROOT", checkout)
-    test_root_and_tracked_seed_are_the_same_portable_inputs()
+    test_root_preserves_portable_legacy_seed_inputs()
 
 
 def test_pinned_consumer_contract_uses_committed_lf_bytes():
@@ -116,11 +117,12 @@ def test_invalid_strategy_fails_before_publication(value):
         compose_parameters(source, {"DEPLOYMENT_TOPOLOGY": "classic", "AGENT_STRATEGY": value})
 
 
-def test_state_example_matches_public_template_and_security_defaults():
-    example = json.loads((ROOT / "samples/customer-poc/ingestion-state.parameters.example.json").read_text())
-    parameters = example["parameters"]
-    assert parameters["writerPrincipalType"]["value"] == "ServicePrincipal"
-    assert parameters["softDeleteRetentionDays"]["value"] == 14
-    assert parameters["containerName"]["value"] == "ingestion-state"
-    assert parameters["storageAccountName"]["value"] == ""
-    assert parameters["ingestionResourceGroupName"]["value"] == ""
+def test_state_profile_is_integrated_and_requires_the_worker_object_id():
+    parameters = json.loads((ROOT / "main.parameters.json").read_text())["parameters"]
+    profile = json.loads((ROOT / "samples/customer-poc/azd-env.example.json").read_text())["inputs"]
+    assert profile["DEPLOY_INGESTION_STATE_STORE"] == "true"
+    assert profile["INGESTION_STATE_WRITER_PRINCIPAL_ID"] == "<WORKER_SERVICE_PRINCIPAL_OBJECT_UUID>"
+    assert parameters["deployIngestionStateStore"]["value"] == "${DEPLOY_INGESTION_STATE_STORE=false}"
+    assert parameters["ingestionStateSoftDeleteRetentionDays"]["value"] == "${INGESTION_STATE_SOFT_DELETE_RETENTION_DAYS=14}"
+    assert parameters["ingestionStateContainerName"]["value"] == "${INGESTION_STATE_CONTAINER_NAME=ingestion-state}"
+    assert parameters["ingestionStateWriterPrincipalId"]["value"] == "${INGESTION_STATE_WRITER_PRINCIPAL_ID=}"

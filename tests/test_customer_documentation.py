@@ -53,7 +53,7 @@ def test_readme_uses_local_customer_entrypoint():
         assert f"]({page.relative_to(ROOT).as_posix()})" in readme
     for relative in (
         "samples/customer-poc/azd-env.example.json",
-        "samples/customer-poc/ingestion-state.parameters.example.json",
+        "main.parameters.json",
         "samples/customer-poc/vpn-clientconfig.example.xml",
         "infra/ingestion-state.bicep",
     ):

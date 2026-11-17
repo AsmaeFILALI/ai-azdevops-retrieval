@@ -78,6 +78,13 @@ if ($appDefinitionExitCode -ne 0) {
     exit $appDefinitionExitCode
 }
 
+Write-Host "Validating integrated ingestion control-state inputs..." -ForegroundColor Cyan
+Invoke-PythonModule -ModuleName 'config.deployment.ingestion_state' -Arguments @('--validate')
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Ingestion control-state validation failed. No Azure resources were changed."
+    exit $LASTEXITCODE
+}
+
 # Validate and bind destinations before bootstrap; azd still owns root creation.
 Write-Host "Preparing workload resource-group destinations..." -ForegroundColor Cyan
 $resourceGroupArguments = @('--azure-dir', (Join-Path $projectRoot '.azure'))

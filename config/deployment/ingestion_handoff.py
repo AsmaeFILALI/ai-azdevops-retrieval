@@ -16,6 +16,7 @@ import re
 from typing import Any
 from uuid import UUID
 
+from config.deployment.context import bound_resource_id
 from config.search.markdown_index import render_index, validate_endpoint, validate_platform_index
 
 LOGGER = logging.getLogger(__name__)
@@ -154,6 +155,17 @@ def build_handoff(
     writer_type = store.get("writerPrincipalType")
     if writer_type not in {"User", "Group", "ServicePrincipal"}:
         raise ValueError("Explicit state writer principal type is required.")
+    if "deployIngestionStateStore" in parameters and _value(parameters, "deployIngestionStateStore") is True:
+        group = _text(_value(outputs, "AZURE_RESOURCE_GROUP"), "application resource group")
+        if str(store.get("resourceGroupName", "")).lower() != group.lower():
+            raise ValueError("Integrated state must belong to the main application resource group.")
+        bound_resource_id(
+            account_id, {"AZURE_SUBSCRIPTION_ID": subscription, "AZURE_RESOURCE_GROUP": group},
+            "Microsoft.Storage/storageAccounts", area="application",
+        )
+        approved_writer = _guid(_value(parameters, "ingestionStateWriterPrincipalId"), "approved state writer")
+        if writer != approved_writer or writer_type != "ServicePrincipal":
+            raise ValueError("Integrated state writer differs from the main deployment's approved service principal.")
 
     return {
         "schema_version": 1,

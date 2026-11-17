@@ -3,8 +3,7 @@
 ## What this profile delivers
 
 Use the reviewed customer platform revision and its
-[customer profile](../../samples/customer-poc/azd-env.example.json) and
-[state-store parameters](../../samples/customer-poc/ingestion-state.parameters.example.json).
+[customer profile](../../samples/customer-poc/azd-env.example.json).
 Do not assume upstream `main` contains fork-specific changes.
 The deployment uses private classic Container Apps UI/orchestrator, Foundry IQ
 `searchIndex`, externally published Markdown chunks, and separate private Blob
@@ -48,8 +47,10 @@ customer runner. Publishing source does not update an Azure application.
 
 ## 1. Prerequisites and policy
 
-Use Azure CLI, Azure Developer CLI, Git, PowerShell 7 or Bash with jq, and
-Python 3.12. Local image builds require working Docker with Linux/amd64 support.
+Use Azure CLI, Azure Developer CLI, Git, PowerShell 7 or Bash with jq 1.7+, and
+Python 3.12. The Bash environment loader uses jq's `--binary` option to preserve
+saved values on Windows; jq 1.6 does not support it.
+Local image builds require working Docker with Linux/amd64 support.
 The worker requires its reviewed uv version, Python 3.12 and `uv.lock`.
 Allow approved package/container registry and tokenizer-download egress during
 dependency preparation. The platform hooks also bootstrap pip over HTTPS;
@@ -93,6 +94,19 @@ If there is a conflict, stop and request a separate network design change.
 Use the customer-accessible platform checkout at the exact handover revision.
 Do not copy someone else's `.azure` directory. From the repository root:
 
+If public PyPI is blocked, first set the approved, credential-free HTTPS
+Python index in this shell so the initial host dependency installation also
+uses it. Replace the example with your own registry's **simple index** URL:
+
+```powershell
+$env:PIP_INDEX_URL = 'https://packages.example.com/repository/pypi/simple/'
+```
+
+In Bash use `export PIP_INDEX_URL='https://packages.example.com/repository/pypi/simple/'`.
+Omit this optional step when using public PyPI. The host setting alone is not
+a durable customer configuration; save the inputs below for subsequent hooks
+and container builds.
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -114,7 +128,10 @@ parameters and sibling component checkouts are shared. Do not deploy different
 environments concurrently from that checkout. A separate clone needs a separate
 parent directory to avoid reusing the same sibling component folders.
 
-Copy the JSON profile to an ignored location and replace every placeholder:
+Before provisioning, complete [the worker service connection](azure-devops-markdown-poc.md#5-integrated-control-state-store-and-worker-identity)
+and obtain its service-principal object ID. Copy the JSON profile to an ignored
+location and replace every placeholder, including
+`INGESTION_STATE_WRITER_PRINCIPAL_ID`:
 
 ```powershell
 New-Item -ItemType Directory -Force .\.local | Out-Null
@@ -124,6 +141,11 @@ Copy-Item .\samples\customer-poc\azd-env.example.json .\.local\customer.json
 Edit that local file before continuing. `inputs` contains nonsecret operator
 choices; `bootstrap` and `connected` are mutually exclusive phase overlays.
 Do not add generated service names, endpoints, secrets or old resource IDs.
+Optional `inputs.PIP_INDEX_URL` and `inputs.NPM_CONFIG_REGISTRY` select your
+approved Python/npm registries; replace their empty values with your own
+credential-free HTTPS endpoints if needed. Empty values in a **new**
+environment preserve the package managers' defaults. Do not copy another
+organization's registry addresses. Keep `BUILD_MODE=local` for these overrides.
 
 ```powershell
 $profile = Get-Content -Raw .\.local\customer.json | ConvertFrom-Json
@@ -232,7 +254,80 @@ scopes, `CHAINLIT_URL` and a persistent session-signing secret. Credentials belo
 in Key Vault through approved references, not this JSON profile.
 Keep `ALLOW_ANONYMOUS=false`; VPN authentication is not application login.
 
-From a connected build host:
+### Configure package registries before building
+
+The customer profile supports the following build-time settings, saved in the
+**selected root azd environment**, not Azure App Configuration:
+
+| Setting | Used by | Default when unset |
+| --- | --- | --- |
+| `PIP_INDEX_URL` | UI and orchestrator Python image dependencies; platform host pip installs | Package manager configuration, normally `https://pypi.org/simple` |
+| `NPM_CONFIG_REGISTRY` | Orchestrator dashboard frontend dependencies | npm configuration, normally `https://registry.npmjs.org/` |
+| `BUILD_MODE` | Both component deployers | This customer profile explicitly selects `local` |
+
+For an existing environment, or instead of editing the profile before its
+initial import, save your own endpoints from the repository root:
+
+```powershell
+azd env set BUILD_MODE local
+if ($LASTEXITCODE -ne 0) { throw 'Cannot select local image builds.' }
+azd env set PIP_INDEX_URL 'https://packages.example.com/repository/pypi/simple/'
+if ($LASTEXITCODE -ne 0) { throw 'Cannot save Python package registry.' }
+azd env set NPM_CONFIG_REGISTRY 'https://packages.example.com/repository/npm/'
+if ($LASTEXITCODE -ne 0) { throw 'Cannot save npm package registry.' }
+```
+
+These `azd env set` commands also work in Bash; check their exit status there.
+The addresses are examples, not this project's or a customer's actual feeds.
+If the profile was already imported, editing its JSON alone does not update
+the selected environment. Use the commands above or explicitly reimport the
+changed inputs.
+
+The parent hook loads saved settings and passes them to the clean, pinned
+component deployers. Local Docker builds receive the Python index in both
+images and the npm registry in the orchestrator frontend stage. Registry
+overrides do not change dependency versions or runtime configuration.
+The pinned components do not forward these overrides to ACR Task builds:
+the parent now stops rather than silently ignoring a configured registry when
+`BUILD_MODE` is not explicitly `local`. Healthy local Linux/amd64 Docker and
+access to the private ACR are required; there is no remote-build fallback for
+this configuration. No component source edits or pin changes are needed.
+
+Only credential-free HTTPS URLs without user information, query strings or
+fragments are supported. Do not embed usernames, passwords or tokens in these
+values, `.env` files, Docker build arguments or source. Authenticated registries
+need a separately reviewed build-secret path; these inputs do not implement
+registry authentication. Install approved corporate CA trust on both the host
+and build images when required; do not disable pip/npm TLS verification.
+
+The reported `files.pythonhosted.org` TLS handshake failure occurred inside
+the UI image build. Changing the host's pip configuration alone does not
+configure that image. The approved Python feed must serve/proxy **artifacts as
+well as the index**; an index that redirects wheels to blocked public hosts
+still fails. Likewise, check npm tarball URLs in the lockfile when using a
+mirror. These settings do not redirect base images, Debian/Microsoft package
+feeds, the platform's `bootstrap.pypa.io` pip bootstrap or tokenizer downloads;
+their egress is still required. They also do not configure the independent
+Markdown worker.
+
+To return to public/default package manager configuration:
+
+```powershell
+azd env unset PIP_INDEX_URL --force
+if ($LASTEXITCODE -ne 0) { throw 'Cannot remove Python registry override.' }
+azd env unset NPM_CONFIG_REGISTRY --force
+if ($LASTEXITCODE -ne 0) { throw 'Cannot remove npm registry override.' }
+Remove-Item Env:PIP_INDEX_URL, Env:NPM_CONFIG_REGISTRY -ErrorAction SilentlyContinue
+```
+
+In Bash clear inherited overrides with `unset PIP_INDEX_URL NPM_CONFIG_REGISTRY`
+after the same `azd env unset` commands. Remove matching values from the local
+profile if it will be imported again. Also check host pip/npm configuration
+files and any `PIP_EXTRA_INDEX_URL` before assuming public or mirror-only access.
+
+### Build or retry application deployment
+
+From a connected build host, after saving any registry overrides:
 
 ```powershell
 azd deploy --no-prompt
@@ -245,191 +340,129 @@ checkout or review/commit changes first. Do not hide source edits with ignore fl
 The selected revisions exclude ignored local environment/configuration files
 from their Docker contexts. Exclusions are not a general secret scanner.
 
-For blocked package downloads, use the [approved local-build feed settings](configuration.md#local-image-builds)
-rather than disabling TLS or putting credentials in Docker build arguments.
+After a package-download failure, correct the settings above and rerun
+`azd deploy`; registry changes do not require another `azd provision`.
+See also the [local-build constraints](configuration.md#local-image-builds).
 Verify both active revisions, recorded image digests, authenticated UI access,
 orchestrator connectivity and a known-answer query. Container Apps provisioning
 state alone does not establish application readiness.
 
-## 5. Deploy the independent control-state store
+## 5. Integrated control-state store and worker identity
 
-The state store is **not automatically deployed by `azd provision` or `azd up`**.
-Create/select the customer WIF publishing service principal with the
-administrator first. Record its approved **service-principal object ID** in the
-selected azd environment as `INGESTION_STATE_WRITER_PRINCIPAL_ID`, through the
-identity setup automation or:
+The customer profile enables `DEPLOY_INGESTION_STATE_STORE=true`.
+`azd provision` creates the dedicated account, private container and Blob private
+endpoint **in the main application resource group**, not a new ingestion group.
+It reuses the deployment's endpoint subnet and Blob DNS configuration, including
+the policy-managed DNS mode. General deployments keep this feature disabled
+unless explicitly selected. No separate state parameter file or
+`az deployment sub create` command is required.
 
-```powershell
-azd env set INGESTION_STATE_WRITER_PRINCIPAL_ID <approved-worker-service-principal-object-id>
-```
+The [storage module](../../infra/modules/storage/ingestion-control-state.bicep)
+keeps private LRS/Hot storage, Entra-only access, versioning and 14-day
+Blob/container soft delete. Infrastructure creates an empty container, never
+Markdown staging, a Search indexer or worker checkpoint blobs. LRS is not a
+reviewed regional disaster-recovery strategy.
 
-This is an operator-only input, not a secret or an App Configuration runtime key.
-It is **not** the application/client ID or automatically the deployer's
-`AZURE_PRINCIPAL_ID`. The platform cannot safely invent or choose the worker
-identity. The commands below require that approved input and verify the service
-principal; they do not create an identity or grant permissions.
+### Create the Azure DevOps service connection before provisioning
 
-### Generate the parameter file automatically
+Use a dedicated publishing identity approved by the tenant administrator.
+Do not reuse the UI, orchestrator, Search or deployment identity.
 
-Run this PowerShell 7 block from the repository root after foundation
-provisioning. It loads the **selected azd environment**, queries its actual VNet,
-`pe-subnet` and Blob private-DNS zone/link, and generates
-`.local/state.parameters.json` from
-[the native ARM parameter example](../../samples/customer-poc/ingestion-state.parameters.example.json).
-No manual JSON editing or copying resource IDs is needed.
+1. In the Azure portal, open **Microsoft Entra ID > App registrations** and
+   create or select the worker's single-tenant app registration. Record its
+   **Application (client) ID** and **Directory (tenant) ID**. An administrator
+   must allow app registration and federated credential management.
+2. Ensure the corresponding enterprise application/service principal exists.
+   For a newly approved registration only, an administrator can create it with
+   `az ad sp create --id <application-client-id>`. Do not create a client secret.
+3. In Azure DevOps, open **Project settings > Service connections > New service
+   connection > Azure Resource Manager**. Select the manual/existing app
+   registration option and **Workload identity federation**. Enter the customer
+   subscription, tenant and **application/client ID**. Choose a stable service
+   connection name. Authorize only the intended publishing pipeline, not all
+   pipelines. Save it as a draft if identity verification is not ready.
+4. Copy the exact **Issuer** and **Subject identifier** generated by Azure
+   DevOps. In the app registration's **Certificates & secrets > Federated
+   credentials**, add the federation for this service connection using those
+   values and audience `api://AzureADTokenExchange`. Do not construct the
+   issuer/subject from memory; the values depend on the connection.
+5. Return to Azure DevOps and save/verify the connection after federation and
+   its approved Azure permissions are in place. If verification requires an
+   ARM read grant, have an administrator grant only the reviewed scope. This
+   state-store feature grants no Contributor, Search or inference permissions.
 
-This block targets the supplied standalone, new-VNet, template-managed DNS
-customer profile. Missing resources, unlinked/policy-managed DNS or a customized
-subnet layout stop generation rather than guessing another target. Azure CLI
-must already select the same subscription and tenant as azd, with read access
-to the network/DNS resources and the approved Entra service principal.
-
-```powershell
-$ErrorActionPreference = 'Stop'
-
-# Generate ingestion-state parameters from the selected azd environment.
-function Get-StateAzJson {
-    param([string[]]$Arguments)
-    $raw = & az @Arguments --only-show-errors --output json
-    if ($LASTEXITCODE -ne 0) { throw 'Azure lookup failed; state parameters were not generated.' }
-    return ($raw -join "`n") | ConvertFrom-Json -AsHashtable -ErrorAction Stop
-}
-
-$rawEnvironment = & azd env get-values --output json
-if ($LASTEXITCODE -ne 0) { throw 'Cannot load the selected azd environment.' }
-$azd = ($rawEnvironment -join "`n") | ConvertFrom-Json -AsHashtable -ErrorAction Stop
-if ($azd -isnot [System.Collections.IDictionary]) { throw 'Invalid azd environment output; expected an object.' }
-foreach ($key in @(
-    'AZURE_ENV_NAME', 'AZURE_SUBSCRIPTION_ID', 'AZURE_TENANT_ID',
-    'AZURE_NETWORK_RESOURCE_GROUP', 'VNET_RESOURCE_ID',
-    'INGESTION_STATE_WRITER_PRINCIPAL_ID'
-)) {
-    if ([string]::IsNullOrWhiteSpace($azd[$key])) {
-        throw "Missing $key in the selected azd environment. Complete the approved input or foundation step first."
-    }
-}
-if ($azd.DEPLOYMENT_MODE -ne 'standalone' -or
-    $azd.NETWORK_ISOLATION -ne 'true' -or $azd.USE_EXISTING_VNET -ne 'false' -or
-    $azd.SIDE_BY_SIDE -ne 'true') {
-    throw 'This generator requires the supplied standalone private customer profile.'
-}
-$subscription = $azd.AZURE_SUBSCRIPTION_ID
-$networkGroup = $azd.AZURE_NETWORK_RESOURCE_GROUP
-$writerId = $azd.INGESTION_STATE_WRITER_PRINCIPAL_ID
-$guid = [guid]::Empty
-if (-not [guid]::TryParse($writerId, [ref]$guid) -or $guid -eq [guid]::Empty) {
-    throw 'INGESTION_STATE_WRITER_PRINCIPAL_ID must be an approved service-principal object GUID.'
-}
-$account = Get-StateAzJson @('account', 'show')
-if ($account.id -ine $subscription -or $account.tenantId -ine $azd.AZURE_TENANT_ID) {
-    throw 'Azure CLI and azd target different subscriptions or tenants. Confirm the intended login/context first.'
-}
-$vnetPrefix = "/subscriptions/$subscription/resourceGroups/$networkGroup/providers/Microsoft.Network/virtualNetworks/"
-if (-not $azd.VNET_RESOURCE_ID.StartsWith($vnetPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'VNET_RESOURCE_ID is outside this customer network destination.'
-}
-$vnet = Get-StateAzJson @(
-    'network', 'vnet', 'show', '--ids', $azd.VNET_RESOURCE_ID,
-    '--subscription', $subscription
-)
-if ($vnet.id -ine $azd.VNET_RESOURCE_ID -or
-    $vnet.provisioningState -ne 'Succeeded' -or
-    [string]::IsNullOrWhiteSpace($vnet.location)) {
-    throw 'The selected customer VNet is not ready.'
-}
-$subnets = @($vnet.subnets | Where-Object {
-    $_.name -eq 'pe-subnet' -and $_.id -ieq "$($vnet.id)/subnets/pe-subnet" -and
-    $_.provisioningState -eq 'Succeeded'
-})
-if ($subnets.Count -ne 1) { throw 'Expected one ready pe-subnet in the selected VNet.' }
-$zone = Get-StateAzJson @(
-    'network', 'private-dns', 'zone', 'show', '--resource-group', $networkGroup,
-    '--name', 'privatelink.blob.core.windows.net', '--subscription', $subscription
-)
-$expectedZoneId = "/subscriptions/$subscription/resourceGroups/$networkGroup/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net"
-if ($zone.id -ine $expectedZoneId) { throw 'Blob private-DNS zone does not match the customer network destination.' }
-$links = @(Get-StateAzJson @(
-    'network', 'private-dns', 'link', 'vnet', 'list', '--resource-group', $networkGroup,
-    '--zone-name', 'privatelink.blob.core.windows.net', '--subscription', $subscription
-))
-if (@($links | Where-Object {
-    $_.virtualNetwork.id -ieq $vnet.id -and $_.provisioningState -eq 'Succeeded'
-}).Count -eq 0) { throw 'Blob private-DNS zone is not linked to the selected VNet.' }
-$writer = Get-StateAzJson @('ad', 'sp', 'show', '--id', $writerId)
-if ($writer.id -ine $writerId) { throw 'Writer lookup did not return the approved service-principal object ID.' }
-
-$state = Get-Content -Raw .\samples\customer-poc\ingestion-state.parameters.example.json |
-    ConvertFrom-Json -AsHashtable
-$state.parameters.environmentName.value = $azd.AZURE_ENV_NAME
-$state.parameters.location.value = $vnet.location
-$state.parameters.privateEndpointSubnetResourceId.value = $subnets[0].id
-$state.parameters.blobPrivateDnsZoneResourceId.value = $zone.id
-$state.parameters.writerPrincipalId.value = $writer.id
-$state.parameters.writerPrincipalType.value = 'ServicePrincipal'
-if ($azd.INGESTION_STATE_RESOURCE_GROUP_NAME) {
-    $state.parameters.ingestionResourceGroupName.value = $azd.INGESTION_STATE_RESOURCE_GROUP_NAME
-}
-if ($azd.INGESTION_STATE_STORAGE_ACCOUNT_NAME) {
-    $state.parameters.storageAccountName.value = $azd.INGESTION_STATE_STORAGE_ACCOUNT_NAME
-}
-$stateLocation = $vnet.location
-$stateDeploymentName = "$($azd.AZURE_ENV_NAME)-ingestion-state"
-$json = $state | ConvertTo-Json -Depth 20
-if ($json -match '<[^>]+>') { throw 'State parameters still contain unfilled placeholders.' }
-New-Item -ItemType Directory -Force .\.local | Out-Null
-$path = Join-Path (Get-Location) '.local\state.parameters.json'
-$stream = [IO.File]::Open($path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-try {
-    $bytes = [Text.UTF8Encoding]::new($false).GetBytes($json + "`n")
-    $stream.Write($bytes, 0, $bytes.Length)
-} finally {
-    $stream.Dispose()
-}
-Write-Host 'Generated .local/state.parameters.json. No Azure resources were changed.'
-```
-
-Only allowlisted template inputs are written; the azd environment is never
-dumped to the file. The state account/endpoint location follows the actual VNet
-region, not an unrelated resource's region. Default retention/container settings
-come from the sample. Empty name overrides generate stable new names. For an
-existing state store with custom names, save the approved
-`INGESTION_STATE_RESOURCE_GROUP_NAME` and `INGESTION_STATE_STORAGE_ACCOUNT_NAME`
-in azd first so those identities are retained.
-
-The block refuses to overwrite an existing parameter file. Reuse an already
-reviewed file on reruns; do not silently replace its target or writer identity.
-Generation is read-only against Azure and does not deploy the state store.
-
-### Validate, preview and deploy
-
-In the same PowerShell session, validate and preview the generated file:
+The state writer input is the **service-principal object ID** of that enterprise
+application, **not** the service-connection ID, application/client ID, app
+registration object ID, tenant ID or deployer's `AZURE_PRINCIPAL_ID`.
+Resolve it from the service connection's application/client ID while signed
+into the correct tenant:
 
 ```powershell
-az deployment sub validate --location $stateLocation --subscription $subscription `
-  --template-file .\infra\ingestion-state.bicep --parameters .\.local\state.parameters.json
-if ($LASTEXITCODE -ne 0) { throw 'State deployment validation failed.' }
-az deployment sub what-if --location $stateLocation --subscription $subscription `
-  --template-file .\infra\ingestion-state.bicep --parameters .\.local\state.parameters.json
-if ($LASTEXITCODE -ne 0) { throw 'State deployment preview failed.' }
+$workerClientId = '<service-connection-application-client-id>'
+$writerId = az ad sp show --id $workerClientId --query id --output tsv
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($writerId)) {
+    throw 'Cannot resolve the worker service-principal object ID in this tenant.'
+}
+$writerId = $writerId.Trim()
+$verifiedWriter = az ad sp show --id $writerId --query id --output tsv
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($verifiedWriter) -or $verifiedWriter.Trim() -ine $writerId) {
+    throw 'Worker object ID verification failed.'
+}
 ```
 
-Review the resolved target, writer and preview. **Only after explicit approval**
-run the deployment:
+For a **new** environment, put that value in the ignored customer profile's
+`INGESTION_STATE_WRITER_PRINCIPAL_ID` placeholder before applying step 2.
+For an **existing selected** environment, save the inputs before the next
+provision:
 
 ```powershell
-az deployment sub create --name $stateDeploymentName --location $stateLocation `
-  --subscription $subscription --template-file .\infra\ingestion-state.bicep `
-  --parameters .\.local\state.parameters.json
-if ($LASTEXITCODE -ne 0) { throw 'State deployment failed; preserve resources and inspect the error.' }
+azd env set DEPLOY_INGESTION_STATE_STORE true
+azd env set INGESTION_STATE_WRITER_PRINCIPAL_ID $writerId
+# Refresh generated parameters through the normal pre-provision hook before preview.
+azd hooks run preprovision --no-prompt
+azd provision --preview
+# Review the preview before applying:
+azd provision --no-prompt
 ```
 
-The [state template](../../infra/ingestion-state.bicep) creates private LRS/Hot
-storage with Shared Key/anonymous access disabled, versioning and 14-day
-Blob/container soft delete. It is not Markdown staging or a Search indexer
-source. The worker creates publisher/checkpoint/run blobs; infrastructure leaves
-the container empty. Verify flags, Approved private endpoint, DNS record, exact
-writer role and private authenticated access. Preserve identities on redeployment;
-LRS is not a reviewed regional disaster-recovery strategy.
+Optional inputs are `INGESTION_STATE_STORAGE_ACCOUNT_NAME` (stable custom
+account name), `INGESTION_STATE_CONTAINER_NAME` (default `ingestion-state`) and
+`INGESTION_STATE_SOFT_DELETE_RETENTION_DAYS` (default `14`, range `1..365`).
+These are nonsecret azd operator inputs, not application runtime settings.
+There is no separate resource-group override in the integrated path.
+
+### Writer roles are part of post-provision
+
+Both platform hooks validate the approved service-principal object ID before
+provisioning. During connected post-provision, the
+[state configuration module](../../config/deployment/ingestion_state.py) reads
+the successful `ingestionControlState` deployment, verifies the exact account
+and container, then idempotently grants **Storage Blob Data Contributor at the
+container scope only** to that writer. It never substitutes the deployer.
+Application capability roles explicitly exclude the state account.
+
+Bootstrap deferral also defers this writer grant. Complete the connected phase
+in step 3; rerunning the normal hook reconciles it without a separate role
+assignment command:
+
+```powershell
+azd hooks run postprovision --no-prompt
+```
+
+Verify the account security flags, Approved private endpoint, private DNS,
+exact writer grant and authenticated Blob access from the publishing agent.
+The deployment principal needs role-assignment authority at that container
+(or an authorized ancestor), management-plane reads and permission to read the
+approved Entra service principal. State access alone does not grant the worker
+Search schema-read/document-write, embedding inference or repository access.
+Those worker permissions still require their own approved setup.
+
+If a standalone state store already contains checkpoints in another resource
+group, stop and review migration before enabling this path. No account is moved,
+copied or deleted automatically, and changing the store can lose publication
+coordination. Do not generate a second store as a retry shortcut. Preserve the
+approved name/container, freeze the worker for any migration, and validate its
+recovery protocol before resuming.
 
 ## 6. Export a reviewed worker handoff
 
@@ -438,32 +471,128 @@ Capture **full successful deployment snapshots**, not raw environment dumps:
 ```powershell
 az deployment group show --subscription <subscription> --resource-group <app-rg> `
   --name <main-deployment> --output json > .\.local\main-deployment.json
-az deployment sub show --subscription <subscription> --name <state-deployment> `
+az deployment group show --subscription <subscription> --resource-group <app-rg> `
+  --name ingestionControlState `
   --output json > .\.local\state-deployment.json
 ```
 
-Render/read-back the customer index through the
-[index-only command](../../config/search/markdown_index.py):
+The second snapshot is the nested group deployment automatically created by
+`azd provision`, not a separately provisioned store. Reading its outputs avoids
+changing the root template's existing 64-output contract. Confirm the connected
+post-provision writer grant separately; a successful ARM snapshot is not proof
+of worker access.
+
+### Generate the ingestion index schema from the azd environment
+
+Give the ingestion pipeline the **full rendered index schema** and its
+SHA-256 file, not the [consumer requirements contract](../../contracts/ado-markdown-index-consumer-v1.json)
+or the unrendered [platform template](../../config/search/rag-index.j2).
+The template is authoritative; the rendered JSON includes the actual index
+name, fields, vector dimensions, semantic configuration and embedding binding.
+
+Run this PowerShell 7 block from the repository root with the intended azd
+environment selected, Azure CLI signed in and the customer VPN connected.
+It reads the selected environment through `azd env get-values`, rather than
+executing or printing the `.env` file. The environment supplies the index name
+and App Configuration endpoint; Search and embedding endpoints are read from
+that environment's published settings under label `agent-lz`. No credentials
+or unrelated environment values are exported.
 
 ```powershell
+$ErrorActionPreference = 'Stop'
+$rawEnvironment = & azd env get-values --output json
+if ($LASTEXITCODE -ne 0) { throw 'Cannot load the selected azd environment.' }
+$azdEnvironment = ($rawEnvironment -join "`n") | ConvertFrom-Json -AsHashtable
+if ($azdEnvironment -isnot [System.Collections.IDictionary]) {
+    throw 'Expected an azd environment object.'
+}
+foreach ($key in @(
+    'AZURE_ENV_NAME', 'AZURE_SUBSCRIPTION_ID', 'APP_CONFIG_ENDPOINT',
+    'SEARCH_RAG_SCHEMA', 'SEARCH_RAG_INDEX_NAME', 'FOUNDRY_IQ_SEARCH_INDEX_NAME'
+)) {
+    if ([string]::IsNullOrWhiteSpace($azdEnvironment[$key])) {
+        throw "Missing $key in the selected azd environment."
+    }
+}
+if ($azdEnvironment.AZURE_ENV_NAME -notmatch '^[A-Za-z0-9_-]+$') {
+    throw 'Environment name cannot be used as an export filename.'
+}
+if ($azdEnvironment.SEARCH_RAG_SCHEMA -ne 'ado_markdown_v1' -or
+    $azdEnvironment.SEARCH_RAG_INDEX_NAME -ne $azdEnvironment.FOUNDRY_IQ_SEARCH_INDEX_NAME) {
+    throw 'Expected the Markdown schema and matching Search/Foundry IQ index names.'
+}
+
+function Get-IndexExportSetting([string]$Key) {
+    $raw = & az appconfig kv show `
+        --endpoint $azdEnvironment.APP_CONFIG_ENDPOINT `
+        --subscription $azdEnvironment.AZURE_SUBSCRIPTION_ID `
+        --key $Key --label agent-lz --auth-mode login `
+        --query value --output tsv --only-show-errors
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(($raw -join "`n"))) {
+        throw "Cannot read required App Configuration setting $Key."
+    }
+    return ($raw -join "`n").Trim()
+}
+
+$searchEndpoint = Get-IndexExportSetting 'SEARCH_SERVICE_QUERY_ENDPOINT'
+$modelDeployments = (Get-IndexExportSetting 'MODEL_DEPLOYMENTS') | ConvertFrom-Json
+$embedding = @($modelDeployments | Where-Object {
+    $_.canonical_name -eq 'EMBEDDING_DEPLOYMENT_NAME'
+})
+if ($embedding.Count -ne 1 -or
+    $embedding[0].model.name -ne 'text-embedding-3-large' -or
+    [string]::IsNullOrWhiteSpace($embedding[0].endpoint) -or
+    [string]::IsNullOrWhiteSpace($embedding[0].name)) {
+    throw 'Expected one explicit text-embedding-3-large deployment and endpoint.'
+}
+
+New-Item -ItemType Directory -Force .\.local | Out-Null
+$schemaPath = ".\.local\$($azdEnvironment.AZURE_ENV_NAME)-index.schema.json"
+if ((Test-Path -LiteralPath $schemaPath) -or
+    (Test-Path -LiteralPath "$schemaPath.sha256")) {
+    throw 'An export already exists. Review it and choose a new schemaPath before rerunning.'
+}
 python -m config.search.markdown_index `
-  --search-endpoint https://<search-service>.search.windows.net `
-  --index-name <explicit-index> `
-  --embedding-endpoint https://<foundry-account>.openai.azure.com `
-  --embedding-deployment text-embedding `
-  --schema-output .\.local\customer-index.schema.json
+    --search-endpoint $searchEndpoint `
+    --index-name $azdEnvironment.SEARCH_RAG_INDEX_NAME `
+    --embedding-endpoint $embedding[0].endpoint `
+    --embedding-deployment $embedding[0].name `
+    --schema-output $schemaPath
+if ($LASTEXITCODE -ne 0) {
+    throw 'Schema export/read-back failed. Any generated files are not validated for handoff.'
+}
+Get-FileHash -LiteralPath $schemaPath -Algorithm SHA256
+Get-Content -LiteralPath "$schemaPath.sha256"
 ```
 
-Without `--apply` this command does not create or update an index. Transfer the
-exact full schema and its independently reviewed SHA-256; a consumer requirements
-JSON is not a deployable schema.
+For an environment named `customer-preflight`, the pipeline inputs are:
+
+- `.local/customer-preflight-index.schema.json`: the full index schema.
+- `.local/customer-preflight-index.schema.json.sha256`: the SHA-256 of those
+  exact JSON bytes. Do not reformat the JSON after reviewing the checksum.
+
+The [index-only command](../../config/search/markdown_index.py) renders locally
+and reads back an existing index to check compatibility. Without `--apply` it
+does not create, update or delete an index. If the index is missing, it only
+plans creation; that is not proof of a deployed publishing target. It writes
+the files **before** live validation, so file existence alone is not success:
+do not hand off files after a failed command. Resolve VPN, permissions or schema
+mismatches first; do not delete/recreate an existing index as a retry shortcut.
+
+Keep the exports local and transfer only the reviewed schema/checksum and
+allowlisted handoff through the customer's approved artifact process. Never
+give the pipeline the `.env` file or raw deployment snapshots. The schema
+does not provision the pipeline, grant access or authorize publication.
+
+After independently reviewing the full schema and checksum, continue with the
+handoff exporter in the same shell (`$schemaPath` is set above):
 
 ```powershell
 python -m config.deployment.ingestion_handoff `
   --platform-deployment .\.local\main-deployment.json `
   --state-deployment .\.local\state-deployment.json `
-  --platform-schema .\.local\customer-index.schema.json `
-  --schema-sha256 <owner-reviewed-sha256> --index-name <explicit-index> `
+  --platform-schema $schemaPath `
+  --schema-sha256 <owner-reviewed-sha256> --index-name $azdEnvironment.SEARCH_RAG_INDEX_NAME `
   --serving-status <serving-or-non-serving> `
   --search-schema-api-version 2025-05-01-preview `
   --output .\.local\ingestion-handoff.json
@@ -493,7 +622,7 @@ commit. Arrange an approved delivery if the customer cannot access the worker
 repository; do not treat this guide as a replacement for that implementation.
 
 Prepare source repository ID, full ref, immutable commit and include/exclude
-rules; platform schema/hash; owner admission; protected environment; and WIF
+rules; platform schema/hash; protected environment; and service
 connection authorized only to the ingestion pipeline.
 The worker needs selected-index document access, separate read-only schema
 permission, OpenAI inference and exact container-scoped Blob permission.

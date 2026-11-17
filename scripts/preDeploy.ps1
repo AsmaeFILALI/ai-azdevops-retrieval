@@ -114,6 +114,20 @@ foreach ($prop in $globalEnv.PSObject.Properties) {
   Set-Item -Path "Env:$($prop.Name)" -Value "$($prop.Value)"
 }
 
+# Package registry overrides are supported by the pinned components' local builds only.
+foreach ($registryName in 'PIP_INDEX_URL', 'NPM_CONFIG_REGISTRY') {
+  $registryValue = [Environment]::GetEnvironmentVariable($registryName)
+  if ([string]::IsNullOrEmpty($registryValue)) { continue }
+  if ($registryValue -cnotmatch '^https://[^/@?#\s]+(?:/[^?#\s]*)?$') {
+    Write-Error "$registryName must be a credential-free HTTPS URL without query or fragment. Registry credentials must not be passed as build arguments."
+    exit 1
+  }
+  if ("$($env:BUILD_MODE)".ToLowerInvariant() -ne 'local') {
+    Write-Error "$registryName requires BUILD_MODE=local with the pinned components. Run 'azd env set BUILD_MODE local'; ACR Task and automatic build selection do not support these registry overrides."
+    exit 1
+  }
+}
+
 # Foundation guard (first step, before any Azure change): azd deploy only
 # deploys applications onto a foundation created by azd provision.
 $foundationMissing = (-not $globalRG) -or (-not $globalEnv.APP_CONFIG_ENDPOINT)

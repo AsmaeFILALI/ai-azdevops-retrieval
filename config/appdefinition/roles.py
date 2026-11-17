@@ -26,7 +26,7 @@ from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlsplit
 
 from config import find_repo_root
-from config.deployment.context import bound_resource_id, parse_resource_id, registry_resource_group
+from config.deployment.context import bound_resource_id, ingestion_state_bindings, parse_resource_id, registry_resource_group
 from config.deployment.resource_groups import resource_group_for
 
 from .loader import KIND_CONTAINER_APP, AppDefinition, component_service_name, effective_components
@@ -209,6 +209,14 @@ def resolve_scope(scope: str, environment: Mapping[str, str], resource_group: st
             items.append(row)
     if explicit:
         items = [item for item in items if str(item["id"]).lower() == explicit.lower()]
+    if scope == SCOPE_STORAGE:
+        state_id = ingestion_state_bindings(environment, run_az).get("storageAccountResourceId", "")
+        if state_id:
+            try:
+                bound_resource_id(state_id, environment, spec.resource_type, area="application")
+            except ValueError as error:
+                raise RoleAssignmentError(str(error)) from error
+            items = [item for item in items if str(item["id"]).lower() != state_id.lower()]
     preferred = next((_host_label(environment[name]) for name in spec.name_sources if (environment.get(name) or "").strip()), "")
     if preferred:
         items = [item for item in items if str(item["name"]).lower() == preferred.lower()]
@@ -315,14 +323,19 @@ def discover_component_identities(
     return identities
 
 
-def _ensure_rbac(principal: str, role_guid: str, scope_id: str, run_az: RunAz) -> bool:
+def _ensure_rbac(
+    principal: str, role_guid: str, scope_id: str, run_az: RunAz, *, subscription: str = "",
+) -> bool:
+    subscription_args = ["--subscription", subscription] if subscription else []
     existing = _json(run_az, ["role", "assignment", "list", "--assignee", principal, "--role", role_guid,
-                              "--scope", scope_id, "--include-inherited"])
+                              "--scope", scope_id, "--include-inherited", *subscription_args])
+    if not isinstance(existing, list):
+        raise RoleAssignmentError("Role discovery must return a JSON array.")
     if existing:
         return False
     run_az(["role", "assignment", "create", "--assignee-object-id", principal,
             "--assignee-principal-type", "ServicePrincipal", "--role", role_guid,
-            "--scope", scope_id, "--output", "none", "--only-show-errors"], required=False)
+            "--scope", scope_id, *subscription_args, "--output", "none", "--only-show-errors"], required=False)
     return True
 
 

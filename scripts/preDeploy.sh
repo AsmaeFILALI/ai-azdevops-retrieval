@@ -107,13 +107,27 @@ azd_values="$(cd "$repo_root" && azd env get-values --output json)" || {
   red "Could not load the selected azd environment; refusing to deploy."
   exit 1
 }
-jq -e 'type == "object" and length > 0 and all(to_entries[];
+jq -b -e 'type == "object" and length > 0 and all(to_entries[];
   (.key | test("^[A-Za-z_][A-Za-z0-9_]*$")) and
-  (.value | type == "string") and (.value | contains("\u0000") | not))' \
-  <<< "$azd_values" >/dev/null || { red "Invalid azd environment JSON, key or value."; exit 1; }
+  (.value | type == "string") and (.value | index("\u0000") == null))' \
+  <<< "$azd_values" >/dev/null || { red "Invalid azd environment JSON, key or value. Check that jq 1.7+ is installed."; exit 1; }
 while IFS= read -r -d '' key && IFS= read -r -d '' value; do
   export "$key=$value"
 done < <(jq -b -j 'to_entries[] | .key, "\u0000", .value, "\u0000"' <<< "$azd_values")
+
+# Package registry overrides are supported by the pinned components' local builds only.
+for registry_name in PIP_INDEX_URL NPM_CONFIG_REGISTRY; do
+  registry_value="${!registry_name:-}"
+  [ -z "$registry_value" ] && continue
+  if [[ ! "$registry_value" =~ ^https://[^/@?#[:space:]]+(/[^?#[:space:]]*)?$ ]]; then
+    red "$registry_name must be a credential-free HTTPS URL without query or fragment. Registry credentials must not be passed as build arguments."
+    exit 1
+  fi
+  if [ "$(printf '%s' "${BUILD_MODE:-}" | tr '[:upper:]' '[:lower:]')" != "local" ]; then
+    red "$registry_name requires BUILD_MODE=local with the pinned components. Run 'azd env set BUILD_MODE local'; ACR Task and automatic build selection do not support these registry overrides."
+    exit 1
+  fi
+done
 
 # ---------- Global env & RG early check ----------
 global_rg="$(get_azd_value "$repo_root" "AZURE_RESOURCE_GROUP")"

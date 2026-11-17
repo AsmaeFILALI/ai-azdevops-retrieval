@@ -88,6 +88,26 @@ param principalType string = 'User'
 @description('Tags to apply to all resources in the deployment')
 param deploymentTags object = {}
 
+@description('Deploy dedicated private ingestion control-state storage in this application resource group. Writer access is reconciled by post-provision, not Bicep.')
+param deployIngestionStateStore bool = false
+
+@description('Optional stable ingestion state account name; empty derives the standalone-compatible name.')
+@maxLength(24)
+param ingestionStateStorageAccountName string = ''
+
+@description('Private Blob container for worker checkpoints, intents and leases, not document staging.')
+@minLength(3)
+@maxLength(63)
+param ingestionStateContainerName string = 'ingestion-state'
+
+@description('Blob and container soft-delete recovery window for ingestion control state.')
+@minValue(1)
+@maxValue(365)
+param ingestionStateSoftDeleteRetentionDays int = 14
+
+@description('Approved worker service-principal object ID, not application/client ID. Required by pre-provision when state storage is enabled.')
+param ingestionStateWriterPrincipalId string = ''
+
 @description('Label used for App Configuration key-value pairs.')
 param appConfigLabel string = 'ai-lz'
 
@@ -3439,6 +3459,33 @@ var _documentsContainers = filter(storageAccountContainersList, container => con
 var _documentsContainerResourceId = deployStorageAccount && length(_documentsContainers) == 1
   ? '${storageAccount!.outputs.resourceId}/blobServices/default/containers/${_documentsContainers[0].name}'
   : ''
+
+var _ingestionStateAccountName = empty(ingestionStateStorageAccountName)
+  ? '${const.abbrs.storage.storageAccount}ing${uniqueString(subscription().id, environmentName, _peLocation)}'
+  : ingestionStateStorageAccountName
+
+module ingestionControlState 'modules/storage/ingestion-control-state.bicep' = if (deployIngestionStateStore) {
+  name: 'ingestionControlState'
+  params: {
+    name: _ingestionStateAccountName
+    environmentName: environmentName
+    location: _peLocation
+    containerName: ingestionStateContainerName
+    privateEndpointSubnetResourceId: _peSubnetId
+    blobPrivateDnsZoneResourceId: policyManagedPrivateDns ? '' : _dnsZoneBlobId
+    writerPrincipalId: ingestionStateWriterPrincipalId
+    writerPrincipalType: 'ServicePrincipal'
+    assignWriterRole: false
+    softDeleteRetentionDays: ingestionStateSoftDeleteRetentionDays
+    tags: _tags
+  }
+  dependsOn: [
+    privateEndpoints
+    aiFoundry
+    aiFoundryStorageAccount
+    privateEndpointPrivateLinkScope
+  ]
+}
 
 //////////////////////////////////////////////////////////////////////////
 // ROLE ASSIGNMENTS

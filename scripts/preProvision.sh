@@ -87,6 +87,12 @@ if [ $APPDEF_EXIT -ne 0 ]; then
     exit $APPDEF_EXIT
 fi
 
+echo "${CYAN}Validating integrated ingestion control-state inputs...${NC}"
+(cd "$PROJECT_ROOT" && "$PYTHON_CMD" -m config.deployment.ingestion_state --validate) || {
+    echo "Ingestion control-state validation failed. No Azure resources were changed." >&2
+    exit 1
+}
+
 # Validate and bind destinations before bootstrap; azd still owns root creation.
 echo "${CYAN}Preparing workload resource-group destinations...${NC}"
 if [ -n "${AZURE_ENV_NAME:-}" ]; then
