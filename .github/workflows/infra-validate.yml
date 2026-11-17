@@ -61,7 +61,7 @@ jobs:
           echo "${AZURE_CONFIG_DIR:-$HOME/.azure}/bin" >> "$GITHUB_PATH"
 
       - name: Test deployment contracts
-        run: python -m pytest tests --quiet
+        run: python -m pytest tests config/search/tests --quiet
 
   build-and-lint:
     name: bicep build + lint

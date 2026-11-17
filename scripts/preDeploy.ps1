@@ -114,6 +114,20 @@ foreach ($prop in $globalEnv.PSObject.Properties) {
   Set-Item -Path "Env:$($prop.Name)" -Value "$($prop.Value)"
 }
 
+# Package registry overrides are supported by the pinned components' local builds only.
+foreach ($registryName in 'PIP_INDEX_URL', 'NPM_CONFIG_REGISTRY') {
+  $registryValue = [Environment]::GetEnvironmentVariable($registryName)
+  if ([string]::IsNullOrEmpty($registryValue)) { continue }
+  if ($registryValue -cnotmatch '^https://[^/@?#\s]+(?:/[^?#\s]*)?$') {
+    Write-Error "$registryName must be a credential-free HTTPS URL without query or fragment. Registry credentials must not be passed as build arguments."
+    exit 1
+  }
+  if ("$($env:BUILD_MODE)".ToLowerInvariant() -ne 'local') {
+    Write-Error "$registryName requires BUILD_MODE=local with the pinned components. Run 'azd env set BUILD_MODE local'; ACR Task and automatic build selection do not support these registry overrides."
+    exit 1
+  }
+}
+
 # Foundation guard (first step, before any Azure change): azd deploy only
 # deploys applications onto a foundation created by azd provision.
 $foundationMissing = (-not $globalRG) -or (-not $globalEnv.APP_CONFIG_ENDPOINT)
@@ -445,6 +459,13 @@ foreach ($c in $manifest.components) {
     }
   }
 
+  $componentStatus = & git -C $target status --porcelain --untracked-files=all 2>$null
+  if ($LASTEXITCODE -ne 0 -or $componentStatus) {
+    Write-Error "$name requires a clean component checkout before building. Commit reviewed changes or use a separate clean checkout; no files were reset."
+    $hadErrors = $true
+    continue
+  }
+
   # Copy shared azd env into the freshly cloned project
   if (Test-Path -LiteralPath $dotAzure) {
     Copy-Item $dotAzure $target -Recurse -Force -Container
@@ -498,6 +519,12 @@ foreach ($dc in $definitionComponents) {
     $actualCommit = "$(& git -C $componentPath rev-parse HEAD 2>$null)".Trim()
     if ($LASTEXITCODE -ne 0 -or $actualCommit -ne $sourceCommit) {
       Write-Error "$componentName must resolve to $sourceCommit but $componentPath is at '$actualCommit'."
+      $hadErrors = $true
+      continue
+    }
+    $componentStatus = & git -C $componentPath status --porcelain --untracked-files=all 2>$null
+    if ($LASTEXITCODE -ne 0 -or $componentStatus) {
+      Write-Error "$componentName requires a clean component checkout before building. No files were reset."
       $hadErrors = $true
       continue
     }

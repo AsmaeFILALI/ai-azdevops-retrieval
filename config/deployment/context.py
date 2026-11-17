@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import re
-from typing import Mapping
+from typing import Callable, Mapping
 from urllib.parse import urlsplit
 
 from config.deployment.resource_groups import resource_group_for
@@ -59,6 +60,51 @@ def bound_resource_id(
     if context.resource_type.lower() != resource_type.lower():
         raise ValueError("Resource ID has an unexpected resource type.")
     return context
+
+
+def ingestion_state_bindings(
+    environment: Mapping[str, str], run_az: Callable[..., str],
+) -> dict[str, str]:
+    """Read the exact integrated module output without consuming root output slots."""
+    enabled = (environment.get("DEPLOY_INGESTION_STATE_STORE") or "false").strip().lower()
+    if enabled not in {"true", "false"}:
+        raise ValueError("DEPLOY_INGESTION_STATE_STORE must be 'true' or 'false'.")
+    if enabled == "false":
+        return {}
+    subscription = (environment.get("AZURE_SUBSCRIPTION_ID") or environment.get("SUBSCRIPTION_ID") or "").strip()
+    if not subscription:
+        raise ValueError("AZURE_SUBSCRIPTION_ID is required to read ingestion state bindings.")
+    raw = run_az([
+        "deployment", "group", "show", "--name", "ingestionControlState",
+        "--resource-group", resource_group_for(environment, "application"),
+        "--subscription", subscription, "--output", "json", "--only-show-errors",
+    ])
+    deployment = json.loads(raw)
+    if not isinstance(deployment, dict):
+        raise ValueError("Ingestion state deployment metadata must be a JSON object.")
+    properties = deployment.get("properties", {})
+    if not isinstance(properties, dict) or properties.get("provisioningState") != "Succeeded":
+        raise ValueError("The integrated ingestionControlState deployment has not succeeded.")
+    outputs = properties.get("outputs") or {}
+    output = outputs.get("ingestionState") if isinstance(outputs, dict) else None
+    state = output.get("value") if isinstance(output, dict) else None
+    if not isinstance(state, dict) or not state or any(not isinstance(value, str) for value in state.values()):
+        raise ValueError("The integrated ingestion state deployment output is missing or invalid.")
+    required = {
+        "environmentName", "resourceGroupName", "storageAccountName", "storageAccountResourceId",
+        "blobEndpoint", "containerName", "containerResourceId", "privateEndpointResourceId",
+        "writerPrincipalId", "writerPrincipalType",
+    }
+    if any(not state.get(key) for key in required):
+        raise ValueError("The integrated ingestion state deployment output is incomplete.")
+    if not environment.get("AZURE_ENV_NAME") or state.get("environmentName") != environment["AZURE_ENV_NAME"]:
+        raise ValueError("Ingestion state belongs to a different or missing azd environment.")
+    if state["resourceGroupName"].lower() != resource_group_for(environment, "application").lower():
+        raise ValueError("Ingestion state belongs to a different application resource group.")
+    bound_resource_id(state["storageAccountResourceId"], environment, "Microsoft.Storage/storageAccounts", area="application")
+    bound_resource_id(state["containerResourceId"], environment, "Microsoft.Storage/storageAccounts/blobServices/containers", area="application")
+    bound_resource_id(state["privateEndpointResourceId"], environment, "Microsoft.Network/privateEndpoints", area="application")
+    return state
 
 
 def context_settings(environment: Mapping[str, str]) -> dict[str, str]:

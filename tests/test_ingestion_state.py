@@ -107,13 +107,10 @@ def test_private_endpoint_reuses_subnet_and_dns_without_vnet_mutation(state):
     parameters = endpoint["properties"]["parameters"]
     assert parameters["subnetResourceId"]["value"] == "[parameters('privateEndpointSubnetResourceId')]"
     assert parameters["privateLinkServiceConnections"]["value"][0]["properties"]["groupIds"] == ["blob"]
-    group = parameters["privateDnsZoneGroup"]["value"]
-    assert group == {
-        "name": "default",
-        "privateDnsZoneGroupConfigs": [{
-            "name": "blob", "privateDnsZoneResourceId": "[parameters('blobPrivateDnsZoneResourceId')]",
-        }],
-    }
+    group = json.dumps(parameters["privateDnsZoneGroup"])
+    assert "empty(parameters('blobPrivateDnsZoneResourceId'))" in group
+    assert "privateDnsZoneResourceId" in group
+    assert "parameters('blobPrivateDnsZoneResourceId')" in group
     assert {item["type"] for item in resources(state)} == {"Microsoft.Resources/deployments"}
     assert len(resources(state)) == 3
 
@@ -140,3 +137,43 @@ def test_no_search_indexer_document_ingestion_seeding_or_secrets(compiled):
     outputs = compiled["outputs"]["ingestionState"]["value"]
     assert {"blobEndpoint", "containerResourceId", "writerPrincipalId", "privateEndpointResourceId"} <= outputs.keys()
     assert not any(term in json.dumps(outputs).lower() for term in ("listkeys", "connectionstring", "sas"))
+
+
+@pytest.fixture(scope="module")
+def integrated(tmp_path_factory):
+    destination = tmp_path_factory.mktemp("integrated-state") / "main.json"
+    subprocess.run(
+        [shutil.which("az"), "bicep", "build", "--file", str(ROOT / "infra" / "main.bicep"),
+         "--outfile", str(destination), "--only-show-errors"],
+        check=True, capture_output=True, text=True,
+    )
+    return json.loads(destination.read_text(encoding="utf-8-sig"))
+
+
+def test_integrated_store_is_optional_in_the_root_resource_group(integrated):
+    assert integrated["parameters"]["deployIngestionStateStore"]["defaultValue"] is False
+    module = next(item for item in resources(integrated) if item.get("name") == "ingestionControlState")
+    assert module["condition"] == "[parameters('deployIngestionStateStore')]"
+    assert "resourceGroup" not in module
+    assert len(integrated["outputs"]) == 64
+    assert module["properties"]["parameters"]["assignWriterRole"]["value"] is False
+    assert module["properties"]["parameters"]["environmentName"]["value"] == "[parameters('environmentName')]"
+    assert "privateEndpoints" in " ".join(module["dependsOn"])
+    assert "aiFoundry" in " ".join(module["dependsOn"])
+
+
+def test_integrated_module_defers_writer_grants_and_exports_exact_handoff(integrated):
+    module = next(item for item in resources(integrated) if item.get("name") == "ingestionControlState")
+    template = module["properties"]["template"]
+    role = next(item for item in resources(template) if item.get("name") == "ingestionStateWriter")
+    assert role["condition"] == "[parameters('assignWriterRole')]"
+    handoff = template["outputs"]["ingestionState"]["value"]
+    assert handoff["resourceGroupName"] == "[resourceGroup().name]"
+    assert handoff["writerPrincipalType"] == "[parameters('writerPrincipalType')]"
+    assert handoff["containerResourceId"] == template["outputs"]["containerResourceId"]["value"]
+    parameters = module["properties"]["parameters"]
+    assert parameters["softDeleteRetentionDays"]["value"] == "[parameters('ingestionStateSoftDeleteRetentionDays')]"
+    subnet = json.dumps(parameters["privateEndpointSubnetResourceId"])
+    assert "parameters('peSubnetName')" in subnet
+    assert "parameters('existingVnetResourceId')" in subnet
+    assert "reference('virtualNetwork').outputs.resourceId.value" in subnet

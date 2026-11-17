@@ -341,13 +341,17 @@ function Set-AgentLzAppConfiguration {
             throw "Expected exactly one '$Type' resource in its destination; set the corresponding resource name explicitly."
     }
 
-    # Storage: main workload vs AI Foundry storage (prefix "staif")
-    $storageName = _resolveResource `
-        -Group $foundryResourceGroup `
-        -Type 'Microsoft.Storage/storageAccounts' `
-        -Fallback "st$nameSuffix" `
-        -Filter { -not $_.name.StartsWith('staif') } `
-        -PreferredName (Get-OptionalEnvValue 'AZURE_STORAGE_ACCOUNT_NAME')
+    # Share the capability-role resolver so the exact control-state account
+    # is excluded from document storage, even when both share a resource group.
+    $documentStorageId = & python -c "import os, sys; sys.path.insert(0, os.environ['AGENTLZ_REPO_ROOT']); from config.appdefinition.roles import resolve_scope; from config.deployment.appconfig import _run_az; sys.stdout.write(resolve_scope('storageAccount', os.environ, os.environ['AZURE_RESOURCE_GROUP'], _run_az))"
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($documentStorageId)) {
+        throw 'Failed to resolve application document storage without the ingestion control-state account.'
+    }
+    $documentStoragePrefix = "/subscriptions/$subscriptionId/resourceGroups/$foundryResourceGroup/providers/Microsoft.Storage/storageAccounts/"
+    if (-not $documentStorageId.StartsWith($documentStoragePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Application document storage belongs to a different configured destination.'
+    }
+    $storageName = $documentStorageId.Substring($documentStoragePrefix.Length)
     $foundryStorageName = _resolveResource `
         -Group $foundryResourceGroup -Optional `
         -Type 'Microsoft.Storage/storageAccounts' `
@@ -848,6 +852,12 @@ Write-Host "📦 Checking placeholder Container Apps for the application definit
 Invoke-PythonModule -ModuleName 'config.deployment.existing_images'
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to plan placeholder Container Apps for the application definition."
+    exit $LASTEXITCODE
+}
+Write-Host "Assigning the ingestion control-state container writer role..."
+Invoke-PythonModule -ModuleName 'config.deployment.ingestion_state'
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Failed to assign the ingestion control-state writer role."
     exit $LASTEXITCODE
 }
 Write-Host "🔐 Assigning capability-profile roles to component identities..."

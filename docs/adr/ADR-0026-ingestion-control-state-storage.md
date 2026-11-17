@@ -1,8 +1,61 @@
 # ADR-0026: Dedicated private Blob storage for ingestion control state
 
-**Status:** Implemented and deployed; infrastructure verified, private data-plane checks deferred<br>
+**Status:** Accepted, revision 2: integrated azd provisioning and post-provision roles<br>
 **Date:** 2026-10-27<br>
 **Owners:** Platform and ingestion maintainers
+
+## Revision 2: integrated customer provisioning (2026-11-13)
+
+The customer requested one provisioning lifecycle and the same resource group
+as the application foundation. The dedicated account/container remains an
+independent worker data boundary; a separate resource group is no longer the
+default lifecycle boundary.
+
+Alternatives were retaining the standalone subscription deployment (additional
+commands and divergent ownership), sharing application storage (broader inherited
+application access), or integrating the dedicated account into the root template.
+The third option is selected. `DEPLOY_INGESTION_STATE_STORE` is opt-in for general
+deployments and enabled by the customer profile. No component pin or worker
+runtime contract changes.
+
+- Root Bicep deploys the private account, empty container and endpoint in the
+  application resource group, reusing the selected subnet and private DNS policy.
+  Endpoint creation waits for the existing endpoint deployment chain.
+- Both pre-provision hooks validate the explicit writer and private topology
+  before Azure writes. Both post-provision hooks reconcile Storage Blob Data
+  Contributor on the exact container, after verifying the service principal
+  **object ID**, account and container. There is no deployer-identity fallback.
+- Application capability roles exclude the exact state account. No application,
+  Search or Foundry data roles are granted to the state writer by this feature.
+- The integrated module's deployment outputs include the nonsecret worker
+  bindings. The root already uses ARM's 64 output slots, so none of its
+  existing outputs are removed or renamed. Role setup and offline handoff
+  read the successful `ingestionControlState` group deployment. Legacy
+  standalone snapshots and the standalone template remain supported.
+
+Fitness functions are compiled same-resource-group/private-storage contracts,
+zero integrated Bicep writer grants, fail-before-write input/ownership tests,
+idempotent container-only role tests, hook parity and integrated-module handoff
+tests. Priorities are least privilege, recoverable state, one lifecycle and
+preserving disabled deployments; all existing storage security/retention
+requirements below remain applicable.
+
+Adopt by creating the approved federated service connection, setting its
+service-principal object ID, reviewing the normal azd preview, provisioning and
+completing post-provision from the connected host. Costs remain a dedicated
+account, private endpoint and retained versions. Existing standalone stores
+are not moved, copied or deleted automatically: freeze the worker and review
+an explicit migration before enabling this path. Disabling the feature does
+not delete retained state in incremental ARM deployments; do not resume a
+worker against a different store without recovery approval.
+
+Customer configuration, runbook, profile and handoff guidance change together.
+Review this decision before production adoption, a regional recovery change,
+or support for a different worker identity or storage topology.
+
+The remaining sections record revision 1 and its historical deployment
+evidence. The separate-resource-group/deployment decisions below are superseded
+for the integrated path.
 
 ## Context
 

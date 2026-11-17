@@ -5,7 +5,8 @@ Runs in ``postProvision`` through ``python -m config.appdefinition
 definition, it expands the component profiles with
 :func:`~config.appdefinition.profiles.expand_profiles`, resolves the component
 Container App identity by its ``azd-service-name`` tag, resolves each scope to
-the single matching resource across the workload destinations, and creates only the
+the single matching resource using provider-specific inventories across the
+workload destinations, and creates only the
 assignments that do not already exist (directly or inherited). Re-runs converge.
 Custom hosted components use the same profile reconciliation after deployment,
 with an instance identity verified by :mod:`config.deployment.hosted_access`.
@@ -25,7 +26,7 @@ from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlsplit
 
 from config import find_repo_root
-from config.deployment.context import bound_resource_id, parse_resource_id, registry_resource_group
+from config.deployment.context import bound_resource_id, ingestion_state_bindings, parse_resource_id, registry_resource_group
 from config.deployment.resource_groups import resource_group_for
 
 from .loader import KIND_CONTAINER_APP, AppDefinition, component_service_name, effective_components
@@ -53,6 +54,7 @@ COSMOS_DATA_ROLES = frozenset({"CosmosDBBuiltInDataContributor", "CosmosDBBuiltI
 @dataclass(frozen=True)
 class ScopeSpec:
     resource_type: str
+    list_command: tuple[str, ...]
     #: azd environment values naming the resource, in preference order. URLs
     #: are reduced to their first host label (for example ``<name>.vault.azure.net``).
     name_sources: tuple[str, ...]
@@ -61,22 +63,34 @@ class ScopeSpec:
 
 
 SCOPES: dict[str, ScopeSpec] = {
-    SCOPE_APP_CONFIG: ScopeSpec("Microsoft.AppConfiguration/configurationStores", ("APP_CONFIG_ENDPOINT",)),
+    SCOPE_APP_CONFIG: ScopeSpec(
+        "Microsoft.AppConfiguration/configurationStores", ("appconfig", "list"), ("APP_CONFIG_ENDPOINT",),
+    ),
     SCOPE_CONTAINER_REGISTRY: ScopeSpec(
-        "Microsoft.ContainerRegistry/registries",
+        "Microsoft.ContainerRegistry/registries", ("acr", "list"),
         ("AZURE_CONTAINER_REGISTRY_NAME", "AZURE_CONTAINER_REGISTRY_ENDPOINT"),
     ),
     SCOPE_KEY_VAULT: ScopeSpec(
-        "Microsoft.KeyVault/vaults",
+        "Microsoft.KeyVault/vaults", ("keyvault", "list"),
         ("AZURE_KEY_VAULT_NAME", "KEY_VAULT_NAME", "KEY_VAULT_URI", "AZURE_KEY_VAULT_ENDPOINT"),
     ),
     SCOPE_FOUNDRY_ACCOUNT: ScopeSpec(
-        "Microsoft.CognitiveServices/accounts", ("AI_FOUNDRY_ACCOUNT_NAME", "AZURE_AI_ACCOUNT_NAME")
+        "Microsoft.CognitiveServices/accounts", ("cognitiveservices", "account", "list"),
+        ("AI_FOUNDRY_ACCOUNT_NAME", "AZURE_AI_ACCOUNT_NAME"),
     ),
-    SCOPE_SEARCH: ScopeSpec("Microsoft.Search/searchServices", ("SEARCH_SERVICE_NAME", "SEARCH_SERVICE_ENDPOINT")),
+    SCOPE_SEARCH: ScopeSpec(
+        "Microsoft.Search/searchServices", ("search", "service", "list"),
+        ("SEARCH_SERVICE_NAME", "SEARCH_SERVICE_ENDPOINT"),
+    ),
     # The Foundry account storage ("staif...") is never an application data store.
-    SCOPE_STORAGE: ScopeSpec("Microsoft.Storage/storageAccounts", ("AZURE_STORAGE_ACCOUNT_NAME", "STORAGE_ACCOUNT_NAME"), ("staif",)),
-    SCOPE_COSMOS: ScopeSpec("Microsoft.DocumentDB/databaseAccounts", ("AZURE_COSMOS_DB_NAME", "COSMOS_DB_ENDPOINT")),
+    SCOPE_STORAGE: ScopeSpec(
+        "Microsoft.Storage/storageAccounts", ("storage", "account", "list"),
+        ("AZURE_STORAGE_ACCOUNT_NAME", "STORAGE_ACCOUNT_NAME"), ("staif",),
+    ),
+    SCOPE_COSMOS: ScopeSpec(
+        "Microsoft.DocumentDB/databaseAccounts", ("cosmosdb", "list"),
+        ("AZURE_COSMOS_DB_NAME", "COSMOS_DB_ENDPOINT"),
+    ),
 }
 SCOPE_ID_SOURCES = {
     SCOPE_APP_CONFIG: ("APP_CONFIG_RESOURCE_ID",),
@@ -173,8 +187,8 @@ def resolve_scope(scope: str, environment: Mapping[str, str], resource_group: st
     items = []
     for group in groups:
         rows = _json(run_az, [
-            "resource", "list", "--subscription", subscription,
-            "--resource-group", group, "--resource-type", spec.resource_type,
+            *spec.list_command, "--subscription", subscription,
+            "--resource-group", group,
         ])
         if not isinstance(rows, list):
             raise RoleAssignmentError("Resource discovery must return a JSON array.")
@@ -195,6 +209,14 @@ def resolve_scope(scope: str, environment: Mapping[str, str], resource_group: st
             items.append(row)
     if explicit:
         items = [item for item in items if str(item["id"]).lower() == explicit.lower()]
+    if scope == SCOPE_STORAGE:
+        state_id = ingestion_state_bindings(environment, run_az).get("storageAccountResourceId", "")
+        if state_id:
+            try:
+                bound_resource_id(state_id, environment, spec.resource_type, area="application")
+            except ValueError as error:
+                raise RoleAssignmentError(str(error)) from error
+            items = [item for item in items if str(item["id"]).lower() != state_id.lower()]
     preferred = next((_host_label(environment[name]) for name in spec.name_sources if (environment.get(name) or "").strip()), "")
     if preferred:
         items = [item for item in items if str(item["name"]).lower() == preferred.lower()]
@@ -301,14 +323,19 @@ def discover_component_identities(
     return identities
 
 
-def _ensure_rbac(principal: str, role_guid: str, scope_id: str, run_az: RunAz) -> bool:
+def _ensure_rbac(
+    principal: str, role_guid: str, scope_id: str, run_az: RunAz, *, subscription: str = "",
+) -> bool:
+    subscription_args = ["--subscription", subscription] if subscription else []
     existing = _json(run_az, ["role", "assignment", "list", "--assignee", principal, "--role", role_guid,
-                              "--scope", scope_id, "--include-inherited"])
+                              "--scope", scope_id, "--include-inherited", *subscription_args])
+    if not isinstance(existing, list):
+        raise RoleAssignmentError("Role discovery must return a JSON array.")
     if existing:
         return False
     run_az(["role", "assignment", "create", "--assignee-object-id", principal,
             "--assignee-principal-type", "ServicePrincipal", "--role", role_guid,
-            "--scope", scope_id, "--output", "none", "--only-show-errors"], required=False)
+            "--scope", scope_id, *subscription_args, "--output", "none", "--only-show-errors"], required=False)
     return True
 
 

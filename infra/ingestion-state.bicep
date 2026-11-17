@@ -54,6 +54,7 @@ module stateStore './modules/storage/ingestion-control-state.bicep' = {
   name: 'ingestionControlState'
   params: {
     name: empty(storageAccountName) ? '${const.abbrs.storage.storageAccount}ing${uniqueString(subscription().id, environmentName, location)}' : storageAccountName
+    environmentName: environmentName
     location: location
     containerName: containerName
     privateEndpointSubnetResourceId: privateEndpointSubnetResourceId

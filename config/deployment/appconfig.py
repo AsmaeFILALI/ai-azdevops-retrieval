@@ -17,6 +17,7 @@ from config.deployment.composition import (
     resolve_mode,
     resolve_ingestion_selection,
     resolve_runtime_mode,
+    runtime_strategy_settings,
     validate_hosted_prerequisites,
     validate_ingestion_selection,
 )
@@ -220,6 +221,7 @@ def build_settings(
         **deployment_context,
         DEPLOY_INGESTION_CONTAINER_APP: str(deploy_ingestion).lower(),
         **search_settings,
+        **runtime_strategy_settings(environment),
         "DEPLOY_HOSTED_AGENT_ORCHESTRATION": str(runtime_hosted).lower(),
         "PREPARE_HOSTED_AGENT": str(prepare_hosted).lower(),
         "DEPLOY_HOSTED_AGENT": (

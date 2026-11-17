@@ -117,6 +117,11 @@ echo "📦 Checking placeholder Container Apps for the application definition…
   echo "Failed to plan placeholder Container Apps for the application definition." >&2
   exit 1
 }
+echo "Assigning the ingestion control-state container writer role..."
+(cd "$PROJECT_ROOT" && python -m config.deployment.ingestion_state) || {
+  echo "Failed to assign the ingestion control-state writer role." >&2
+  exit 1
+}
 echo "🔐 Assigning capability-profile roles to component identities…"
 (cd "$PROJECT_ROOT" && python -m config.appdefinition --assign-roles) || {
   echo "Failed to assign capability-profile roles to component identities." >&2
