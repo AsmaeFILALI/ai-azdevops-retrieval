@@ -107,13 +107,27 @@ azd_values="$(cd "$repo_root" && azd env get-values --output json)" || {
   red "Could not load the selected azd environment; refusing to deploy."
   exit 1
 }
-jq -e 'type == "object" and length > 0 and all(to_entries[];
+jq -b -e 'type == "object" and length > 0 and all(to_entries[];
   (.key | test("^[A-Za-z_][A-Za-z0-9_]*$")) and
-  (.value | type == "string") and (.value | contains("\u0000") | not))' \
-  <<< "$azd_values" >/dev/null || { red "Invalid azd environment JSON, key or value."; exit 1; }
+  (.value | type == "string") and (.value | index("\u0000") == null))' \
+  <<< "$azd_values" >/dev/null || { red "Invalid azd environment JSON, key or value. Check that jq 1.7+ is installed."; exit 1; }
 while IFS= read -r -d '' key && IFS= read -r -d '' value; do
   export "$key=$value"
 done < <(jq -b -j 'to_entries[] | .key, "\u0000", .value, "\u0000"' <<< "$azd_values")
+
+# Package registry overrides are supported by the pinned components' local builds only.
+for registry_name in PIP_INDEX_URL NPM_CONFIG_REGISTRY; do
+  registry_value="${!registry_name:-}"
+  [ -z "$registry_value" ] && continue
+  if [[ ! "$registry_value" =~ ^https://[^/@?#[:space:]]+(/[^?#[:space:]]*)?$ ]]; then
+    red "$registry_name must be a credential-free HTTPS URL without query or fragment. Registry credentials must not be passed as build arguments."
+    exit 1
+  fi
+  if [ "$(printf '%s' "${BUILD_MODE:-}" | tr '[:upper:]' '[:lower:]')" != "local" ]; then
+    red "$registry_name requires BUILD_MODE=local with the pinned components. Run 'azd env set BUILD_MODE local'; ACR Task and automatic build selection do not support these registry overrides."
+    exit 1
+  fi
+done
 
 # ---------- Global env & RG early check ----------
 global_rg="$(get_azd_value "$repo_root" "AZURE_RESOURCE_GROUP")"
@@ -123,10 +137,17 @@ acr_task_agent_pool="$(get_azd_value "$repo_root" "ACR_TASK_AGENT_POOL")"
 
 # Foundation guard (first step, before any Azure change): azd deploy only
 # deploys applications onto a foundation created by azd provision.
-if [ -z "$global_rg" ] || [ -z "${APP_CONFIG_ENDPOINT:-}" ] || ! rg_exists "$global_rg" "${global_sub:-}"; then
+if [ -z "$global_rg" ] || [ -z "${APP_CONFIG_ENDPOINT:-}" ]; then
   red "The foundation is not provisioned. Run azd provision first."
   exit 3
 fi
+command -v python3 >/dev/null 2>&1 || { red "python3 is required to verify the foundation."; exit 1; }
+python3 -m config.deployment.resource_groups --azure-dir "$dot_azure" --check >/dev/null || {
+  red "Resource-group binding check failed. No changes were made."; exit 3;
+}
+python3 -m config.deployment.outputs --check-foundation || {
+  red "Foundation destination/project verification failed. Run azd provision first."; exit 3;
+}
 
 # Re-validate the application definition and compare it with the binding.
 app_definition_path="${AGENTLZ_APP_DEFINITION:-$repo_root/app-definition.json}"
@@ -364,7 +385,20 @@ while IFS= read -r comp; do
   if [ -d "$target" ]; then
     yellow "  ℹ️  '$name' already exists at $target, verifying pin."
   else
-    if [ "$ref_type" = "branch" ]; then
+    if [ "$ref_type" = "branch" ] && [ -n "$expected_commit" ]; then
+      # The full commit is the pin; the branch only locates it. Clone the
+      # branch history without file contents, require the pin to be part of
+      # that history, then check out exactly the pinned commit.
+      if ! git clone --filter=blob:none --no-checkout --branch "$ref" --quiet "$repo" "$target" >/dev/null 2>&1; then
+        red "$name: git clone failed."; had_errors=1; continue
+      fi
+      if ! git -C "$target" merge-base --is-ancestor "$expected_commit" HEAD >/dev/null 2>&1; then
+        red "$name: pinned commit $expected_commit is not in the history of branch $ref."; had_errors=1; continue
+      fi
+      if ! git -C "$target" -c advice.detachedHead=false checkout -q --detach "$expected_commit" >/dev/null 2>&1; then
+        red "$name: git checkout of pinned commit $expected_commit failed."; had_errors=1; continue
+      fi
+    elif [ "$ref_type" = "branch" ]; then
       if ! git clone --depth 1 --branch "$ref" --quiet "$repo" "$target" >/dev/null 2>&1; then
         red "$name: git clone failed."; had_errors=1; continue
       fi
@@ -388,6 +422,15 @@ while IFS= read -r comp; do
       had_errors=1
       continue
     fi
+  fi
+
+  if ! component_status="$(git -C "$target" status --porcelain --untracked-files=all 2>/dev/null)"; then
+    red "$name: could not verify a clean component checkout; no build performed."
+    had_errors=1; continue
+  fi
+  if [ -n "$component_status" ]; then
+    red "$name requires a clean component checkout before building. Commit reviewed changes or use a separate clean checkout; no files were reset."
+    had_errors=1; continue
   fi
 
   git config --global --add safe.directory "$target" >/dev/null 2>&1 || true
@@ -433,6 +476,14 @@ while IFS= read -r dcomp; do
     actual_commit="$(git -C "$c_path" rev-parse HEAD 2>/dev/null || true)"
     if [ "$actual_commit" != "$c_commit" ]; then
       red "$c_name must resolve to $c_commit but $c_path is at '$actual_commit'."
+      had_errors=1; continue
+    fi
+    if ! component_status="$(git -C "$c_path" status --porcelain --untracked-files=all 2>/dev/null)"; then
+      red "$c_name: could not verify a clean component checkout; no build performed."
+      had_errors=1; continue
+    fi
+    if [ -n "$component_status" ]; then
+      red "$c_name requires a clean component checkout before building. No files were reset."
       had_errors=1; continue
     fi
   fi

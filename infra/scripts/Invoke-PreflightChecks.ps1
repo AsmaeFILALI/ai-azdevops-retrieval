@@ -469,8 +469,14 @@ function Test-Topology {
     }
 
     $deployJump = Resolve-DeployJumpbox $P
+    $deployVpn = Resolve-DeployFlag -P $P -Key 'deployVpnGateway' -Default $false
     $allowedIps = Get-ArrayValue $P['allowedIpRanges']
-    if ($netIso -and -not $deployJump -and $allowedIps.Count -eq 0) {
+    if ($netIso -and $deployVpn) {
+        Add-Finding -Severity INFO -Code 'ISO_VPN_SELECTED' `
+            -Message 'Point-to-site VPN selected. Private access still requires client profile import, sign-in, routes, and DNS.' `
+            -Hint 'Verify private DNS and HTTPS from the connected host before post-provision configuration.'
+    }
+    if ($netIso -and -not $deployJump -and -not $deployVpn -and $allowedIps.Count -eq 0) {
         Add-Finding -Severity WARN -Code 'ISO_NO_INGRESS' `
             -Message "networkIsolation=true but no jumpbox/VM is deployed and allowedIpRanges is empty." `
             -Hint "You will not have any way to reach the workload after deployment. Set DEPLOY_JUMPBOX=true, ALLOWED_IP_RANGES=<your-ip>, or plan to use an existing hub jumpbox via EXISTING_JUMPBOX_RESOURCE_ID."
@@ -489,7 +495,8 @@ function Test-ExistingHostedOperatorAccess {
     $scope = (Get-StringValue $values['AZURE_AI_PROJECT_RESOURCE_ID']).Trim()
     $principal = (Get-StringValue $P['principalId']).Trim()
     $subscription = (Get-StringValue $values['AZURE_SUBSCRIPTION_ID']).Trim()
-    $group = (Get-StringValue $values['AZURE_RESOURCE_GROUP']).Trim()
+    $group = Get-FoundryResourceGroup -ApplicationResourceGroup $values['AZURE_RESOURCE_GROUP'] `
+        -FoundryResourceGroup $values['AZURE_FOUNDRY_RESOURCE_GROUP']
     $prefix = "/subscriptions/$subscription/resourceGroups/$group/providers/Microsoft.CognitiveServices/accounts/"
     $newProject = [string]::IsNullOrWhiteSpace($scope)
     if (-not $principal -or -not $subscription -or
@@ -1478,9 +1485,11 @@ function Test-ModelQuota {
     $deployments = @($deployments | Where-Object { $_.model.format -eq 'OpenAI' })
     if ($deployments.Count -eq 0) { return }
     $selectedEnvironment = Get-AzdEnvValues
+    $foundryGroup = Get-FoundryResourceGroup -ApplicationResourceGroup $selectedEnvironment['AZURE_RESOURCE_GROUP'] `
+        -FoundryResourceGroup $selectedEnvironment['AZURE_FOUNDRY_RESOURCE_GROUP']
     $existing = @(Get-ExistingModelDeployments -Location $Location -SubscriptionId $selectedSubscription `
         -ProjectResourceId $selectedEnvironment['AZURE_AI_PROJECT_RESOURCE_ID'] `
-        -ResourceGroup $selectedEnvironment['AZURE_RESOURCE_GROUP'] -ReadAzureJson {
+        -ResourceGroup $foundryGroup -ReadAzureJson {
         param([string[]]$Arguments)
         Invoke-AzCliRaw -Arguments ($Arguments + @('-o', 'json'))
     } -OnWarning {

@@ -12,6 +12,7 @@
     "SEARCH_ANALYZER_NAME": "standard.lucene",
     "EMBEDDINGS_VECTOR_DIMENSIONS": "3072",
     "SEARCH_RAG_INDEX_NAME": "{{search_rag_index_name}}",
+    "SEARCH_RAG_SCHEMA": {{ SEARCH_RAG_SCHEMA | default('standard', true) | tojson }},
     "SEARCH_QUERIES_INDEX_NAME": "nl2sql-{{RESOURCE_TOKEN}}-queries",
     "SEARCH_TABLES_INDEX_NAME": "nl2sql-{{RESOURCE_TOKEN}}-tables",
     "SEARCH_MEASURES_INDEX_NAME": "nl2sql-{{RESOURCE_TOKEN}}-measures",

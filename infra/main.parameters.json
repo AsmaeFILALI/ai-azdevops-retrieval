@@ -5,7 +5,8 @@
 
     "environmentName":                     { "value": "${AZURE_ENV_NAME}" },
     "location":                            { "value": "${AZURE_LOCATION}" },
-    "aiFoundryLocation":                   { "value": "${AZURE_AI_FOUNDRY_LOCATION}" },
+    "foundryResourceGroupName":             { "value": "${AZURE_FOUNDRY_RESOURCE_GROUP=}" },
+    "networkResourceGroupName":             { "value": "${AZURE_NETWORK_RESOURCE_GROUP=}" },
     "cosmosLocation":                        { "value": "${AZURE_COSMOS_LOCATION}" },
     "searchServiceLocation":                 { "value": "${AZURE_SEARCH_LOCATION=}" },
     "speechServiceLocation":                 { "value": "${AZURE_SPEECH_LOCATION=}" },
@@ -15,9 +16,27 @@
     "appConfigLabel":                      { "value": "agent-lz" },
 
     "networkIsolation":                    { "value": "${NETWORK_ISOLATION}" },
+    "vnetAddressPrefixes":                 { "value": ["10.77.0.0/21"] },
+    "agentSubnetPrefix":                   { "value": "10.77.0.0/24" },
+    "acaEnvironmentSubnetPrefix":          { "value": "10.77.1.0/24" },
+    "peSubnetPrefix":                      { "value": "10.77.2.0/26" },
+    "azureBastionSubnetPrefix":            { "value": "10.77.2.64/26" },
+    "azureFirewallSubnetPrefix":           { "value": "10.77.2.128/26" },
+    "gatewaySubnetPrefix":                 { "value": "10.77.2.192/26" },
+    "azureAppGatewaySubnetPrefix":         { "value": "10.77.3.0/27" },
+    "jumpboxSubnetPrefix":                 { "value": "10.77.3.64/27" },
+    "devopsBuildAgentsSubnetPrefix":       { "value": "10.77.3.96/27" },
+    "deployVpnGateway":                    { "value": "${DEPLOY_VPN_GATEWAY=false}" },
+    "vpnClientAddressPool":                { "value": "${VPN_CLIENT_ADDRESS_POOL=}" },
+    "vpnDnsResolverSubnetPrefix":          { "value": "${VPN_DNS_RESOLVER_SUBNET_PREFIX=}" },
+    "vpnTenantId":                         { "value": "${VPN_TENANT_ID=}" },
+    "vpnGatewaySku":                       { "value": "${VPN_GATEWAY_SKU=VpnGw1AZ}" },
+    "vpnAudience":                         { "value": "${VPN_AUDIENCE=c632b3df-fb67-4d84-bdcf-b95ad541b5c8}" },
     "allowedIpRanges":                     { "value": [] },
     "privateEndpointLocation":             { "value": "${AZURE_PE_LOCATION=}" },
     "privateEndpointResourceGroupName":    { "value": "${AZURE_PE_RESOURCE_GROUP_NAME=}" },
+    "applicationPeSubnetName":             { "value": "${AZURE_APPLICATION_PE_SUBNET_NAME=}" },
+    "applicationPeSubnetPrefix":           { "value": "${AZURE_APPLICATION_PE_SUBNET_PREFIX=}" },
     "deploymentMode":                      { "value": "${DEPLOYMENT_MODE=standalone}" },
     "useUAI":                              { "value": "${USE_UAI}" },
     "useCAppAPIKey":                       { "value": "${USE_CAPP_API_KEY=false}" },    
@@ -75,9 +94,10 @@
         }
       ]
     } },
-    "deployAiFoundrySubnet":                { "value": "true" },
+    "deployAiFoundrySubnet":                { "value": "${DEPLOY_AI_FOUNDRY_SUBNET=true}" },
     "deployAppConfig":                      { "value": "true" },
     "additionalAppConfigurationSettings":   { "value": [
+      { "name": "SEARCH_RAG_SCHEMA", "value": "${SEARCH_RAG_SCHEMA=standard}" },
       { "name": "HOSTED_CONTINUITY_ENABLED", "value": "false" },
       { "name": "HOSTED_CONVERSATION_OWNER_BINDING", "value": "${HOSTED_CONVERSATION_OWNER_BINDING=delegated}" },
       { "name": "HOSTED_CONVERSATION_OWNER_BINDING_VALIDATED", "value": "false" },
@@ -171,9 +191,9 @@
     "bingSearchName":                        { "value": null },  
     "appConfigName":                         { "value": null },
     "appInsightsName":                       { "value": null },
-    "containerEnvName":                      { "value": null },
+    "containerEnvName":                      { "value": "${CONTAINER_ENV_NAME=}" },
     "containerRegistryName":                 { "value": null },
-    "dbAccountName":                         { "value": null },
+    "dbAccountName":                         { "value": "${COSMOS_ACCOUNT_NAME=}" },
     "dbDatabaseName":                        { "value": null },
     "dbDatabaseThroughput":                  { "value": null },
     "keyVaultName":                          { "value": null },
@@ -304,7 +324,7 @@
     "containerAppsList": {
       "value": [
         {
-          "name": null,
+          "name": "${ORCHESTRATOR_APP_NAME=}",
           "external" : true,
           "service_name": "orchestrator",
           "profile_name": "main",
@@ -326,7 +346,7 @@
           ]
         },
         {
-          "name": null,
+          "name": "${FRONTEND_APP_NAME=}",
           "external" : true,
           "service_name": "frontend",
           "profile_name": "main",
@@ -345,7 +365,7 @@
           ]
         },
         {
-          "name": null,
+          "name": "${DATA_INGEST_APP_NAME=}",
           "external" : true,
           "service_name": "dataingest",
           "profile_name": "main",

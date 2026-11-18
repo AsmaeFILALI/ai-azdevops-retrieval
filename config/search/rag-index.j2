@@ -1,0 +1,113 @@
+{% set markdown_index = MARKDOWN_INDEX | default(SEARCH_RAG_SCHEMA | default('standard') == 'ado_markdown_v1') %}
+{
+  "name": {{ SEARCH_RAG_INDEX_NAME | tojson }},
+  "permissionFilterOption": "disabled",
+  "description": "RAG index for document retrieval. Contains chunked documents with content, metadata, and vectors for semantic search.",
+  "fields": [
+    { "name": "id", "type": "Edm.String", "key": true, "searchable": true, "retrievable": true, "filterable": true, "analyzer": "keyword" },
+    { "name": "parent_id", "type": "Edm.String", "searchable": false, "retrievable": true{% if markdown_index %}, "filterable": true{% endif %} },
+    { "name": "conversationId", "type": "Edm.String", "searchable": false, "retrievable": true, "filterable": true },
+    { "name": "metadata_storage_path", "type": "Edm.String", "searchable": false, "retrievable": true },
+    { "name": "metadata_storage_name", "type": "Edm.String", "searchable": false, "retrievable": true },
+    { "name": "metadata_storage_last_modified", "type": "Edm.DateTimeOffset", "searchable": false, "retrievable": true, "sortable": true, "filterable": true },
+    { "name": "metadata_security_group_ids", "type": "Collection(Edm.String)", "searchable": false, "retrievable": true, "filterable": true, "permissionFilter": "groupIds" },
+    { "name": "metadata_security_user_ids", "type": "Collection(Edm.String)", "searchable": false, "retrievable": true, "filterable": true, "permissionFilter": "userIds" },
+    { "name": "metadata_security_rbac_scope", "type": "Edm.String", "searchable": false, "retrievable": true, "filterable": true, "permissionFilter": "rbacScope" },
+    {
+      "name": "custom_metadata",
+      "type": "Collection(Edm.ComplexType)",
+      "fields": [
+        { "name": "key", "type": "Edm.String", "searchable": false, "retrievable": true, "filterable": true, "facetable": true },
+        { "name": "value", "type": "Edm.String", "searchable": true, "retrievable": true, "filterable": true, "facetable": true }
+      ]
+    },
+    { "name": "chunk_id", "type": "Edm.Int32", "searchable": false, "retrievable": true },
+    { "name": "content", "type": "Edm.String", "searchable": true, "retrievable": true, "analyzer": {{ SEARCH_ANALYZER_NAME | tojson }} },
+    { "name": "imageCaptions", "type": "Edm.String", "searchable": true, "retrievable": true, "analyzer": {{ SEARCH_ANALYZER_NAME | tojson }} },
+    { "name": "page", "type": "Edm.Int32", "searchable": false, "retrievable": true },
+    { "name": "offset", "type": "Edm.Int64", "searchable": false, "retrievable": true },
+    { "name": "length", "type": "Edm.Int32", "searchable": false, "retrievable": true },
+    { "name": "title", "type": "Edm.String", "searchable": true, "retrievable": true, "filterable": true, "analyzer": {{ SEARCH_ANALYZER_NAME | tojson }} },
+    { "name": "category", "type": "Edm.String", "searchable": true, "retrievable": true, "filterable": true, "analyzer": {{ SEARCH_ANALYZER_NAME | tojson }} },
+    { "name": "filepath", "type": "Edm.String", "searchable": true, "retrievable": true, "filterable": true, "analyzer": "standard" },
+    { "name": "url", "type": "Edm.String", "searchable": false, "retrievable": true },
+    { "name": "summary", "type": "Edm.String", "searchable": true, "retrievable": true },
+    { "name": "relatedImages", "type": "Collection(Edm.String)", "searchable": false, "retrievable": true },
+    { "name": "relatedFiles", "type": "Collection(Edm.String)", "searchable": false, "retrievable": true },
+    { "name": "source", "type": "Edm.String", "searchable": false, "retrievable": true, "filterable": true },
+    { "name": "provenance_id", "type": "Edm.String", "searchable": false, "retrievable": true, "filterable": true },
+    { "name": "source_uri_id", "type": "Edm.String", "searchable": false, "retrievable": true, "filterable": true },
+    { "name": "source_version_id", "type": "Edm.String", "searchable": false, "retrievable": true, "filterable": true },
+    { "name": "content_checksum_sha256", "type": "Edm.String", "searchable": false, "retrievable": true, "filterable": true },
+    { "name": "ingested_at", "type": "Edm.DateTimeOffset", "searchable": false, "retrievable": true, "filterable": true, "sortable": true },
+    { "name": "ingest_run_id", "type": "Edm.String", "searchable": false, "retrievable": true, "filterable": true },
+    { "name": "data_classification", "type": "Edm.String", "searchable": false, "retrievable": true, "filterable": true, "facetable": true },
+    { "name": "right_to_use", "type": "Edm.String", "searchable": false, "retrievable": true, "filterable": true, "facetable": true },
+    { "name": "retention_class", "type": "Edm.String", "searchable": false, "retrievable": true, "filterable": true, "facetable": true },
+    { "name": "delete_after", "type": "Edm.String", "searchable": false, "retrievable": true, "filterable": true, "sortable": true },
+    {% if markdown_index %}
+    { "name": "repo_id", "type": "Edm.String", "key": false, "searchable": false, "filterable": true, "sortable": false, "facetable": false, "retrievable": true },
+    { "name": "source_ref", "type": "Edm.String", "key": false, "searchable": false, "filterable": true, "sortable": false, "facetable": false, "retrievable": true },
+    { "name": "source_path", "type": "Edm.String", "key": false, "searchable": false, "filterable": true, "sortable": false, "facetable": false, "retrievable": true },
+    { "name": "heading_path", "type": "Edm.String", "key": false, "searchable": true, "filterable": false, "sortable": false, "facetable": false, "retrievable": true, "analyzer": "standard.lucene" },
+    { "name": "section_id", "type": "Edm.String", "key": false, "searchable": false, "filterable": true, "sortable": false, "facetable": false, "retrievable": true },
+    { "name": "part", "type": "Edm.Int32", "key": false, "searchable": false, "filterable": false, "sortable": false, "facetable": false, "retrievable": true },
+    { "name": "part_count", "type": "Edm.Int32", "key": false, "searchable": false, "filterable": false, "sortable": false, "facetable": false, "retrievable": true },
+    { "name": "start_line", "type": "Edm.Int32", "key": false, "searchable": false, "filterable": false, "sortable": false, "facetable": false, "retrievable": true },
+    { "name": "end_line", "type": "Edm.Int32", "key": false, "searchable": false, "filterable": false, "sortable": false, "facetable": false, "retrievable": true },
+    { "name": "pipeline_version", "type": "Edm.String", "key": false, "searchable": false, "filterable": true, "sortable": false, "facetable": false, "retrievable": true },
+    {% endif %}
+    { "name": "contentVector", "type": "Collection(Edm.Single)", "searchable": true, "retrievable": true, "dimensions": {{ EMBEDDINGS_VECTOR_DIMENSIONS }}, "vectorSearchProfile": "default" },
+    { "name": "captionVector", "type": "Collection(Edm.Single)", "searchable": true, "retrievable": true, "dimensions": {{ EMBEDDINGS_VECTOR_DIMENSIONS }}, "vectorSearchProfile": "default" }
+  ],
+  "corsOptions": {
+    "allowedOrigins": ["*"],
+    "maxAgeInSeconds": 60
+  },
+  "vectorSearch": {
+    "profiles": [
+      { "name": "default", "algorithm": "hnsw"{% if EMBEDDING_MODEL_INFO %}, "vectorizer": "azure_openai_vectorizer"{% endif %} }
+    ],
+    "algorithms": [
+      {
+        "name": "hnsw",
+        "kind": "hnsw",
+        "hnswParameters": { "m": 4, "efConstruction": 400, "efSearch": 500, "metric": "cosine" }
+      }
+    ]{% if EMBEDDING_MODEL_INFO %},
+    "vectorizers": [
+      {
+        "name": "azure_openai_vectorizer",
+        "kind": "azureOpenAI",
+        "azureOpenAIParameters": {
+          "resourceUri": {{ EMBEDDING_MODEL_INFO.endpoint | tojson }},
+          "deploymentId": {{ EMBEDDING_MODEL_INFO.deployment_name | tojson }},
+          "modelName": {{ EMBEDDING_MODEL_INFO.model_name | tojson }}
+        }
+      }
+    ]{% endif %}
+  },
+  "semantic": {
+    "defaultConfiguration": "semantic-config",
+    "configurations": [
+      {
+        "name": "semantic-config",
+        "prioritizedFields": {
+          {% if markdown_index %}
+          "titleField": { "fieldName": "title" },
+          {% endif %}
+          "prioritizedContentFields": [
+            { "fieldName": "content" }{% if not markdown_index %},
+            { "fieldName": "imageCaptions" }{% endif %}
+          ],
+          "prioritizedKeywordsFields": [
+            {% if markdown_index %}
+            { "fieldName": "heading_path" },
+            {% endif %}
+            { "fieldName": "category" }
+          ]
+        }
+      }
+    ]
+  }
+}

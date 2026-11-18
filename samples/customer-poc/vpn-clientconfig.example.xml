@@ -1,0 +1,22 @@
+<clientconfig xmlns="http://schemas.datacontract.org/2004/07/">
+  <dnsservers>
+    <dnsserver>REPLACE_WITH_CUSTOMER_RESOLVER_IP</dnsserver>
+  </dnsservers>
+  <dnssuffixes>
+    <dnssuffix>.vault.azure.net</dnssuffix>
+    <dnssuffix>.vaultcore.azure.net</dnssuffix>
+    <dnssuffix>.azconfig.io</dnssuffix>
+    <dnssuffix>.search.windows.net</dnssuffix>
+    <dnssuffix>.documents.azure.com</dnssuffix>
+    <dnssuffix>.blob.core.windows.net</dnssuffix>
+    <dnssuffix>.azurecr.io</dnssuffix>
+    <dnssuffix>.openai.azure.com</dnssuffix>
+    <dnssuffix>.services.ai.azure.com</dnssuffix>
+    <dnssuffix>.cognitiveservices.azure.com</dnssuffix>
+    <dnssuffix>.azurecontainerapps.io</dnssuffix>
+    <dnssuffix>.monitor.azure.com</dnssuffix>
+    <dnssuffix>.opinsights.azure.com</dnssuffix>
+    <dnssuffix>.applicationinsights.io</dnssuffix>
+    <dnssuffix>.azure.automation.net</dnssuffix>
+  </dnssuffixes>
+</clientconfig>

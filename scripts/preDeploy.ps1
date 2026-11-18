@@ -110,15 +110,35 @@ $dotAzure   = Join-Path $repoRoot '.azure'
 $globalEnv  = Get-AzdEnv -projectPath $repoRoot
 $globalRG   = $globalEnv.AZURE_RESOURCE_GROUP
 $globalSub  = $globalEnv.AZURE_SUBSCRIPTION_ID
+foreach ($prop in $globalEnv.PSObject.Properties) {
+  Set-Item -Path "Env:$($prop.Name)" -Value "$($prop.Value)"
+}
+
+# Package registry overrides are supported by the pinned components' local builds only.
+foreach ($registryName in 'PIP_INDEX_URL', 'NPM_CONFIG_REGISTRY') {
+  $registryValue = [Environment]::GetEnvironmentVariable($registryName)
+  if ([string]::IsNullOrEmpty($registryValue)) { continue }
+  if ($registryValue -cnotmatch '^https://[^/@?#\s]+(?:/[^?#\s]*)?$') {
+    Write-Error "$registryName must be a credential-free HTTPS URL without query or fragment. Registry credentials must not be passed as build arguments."
+    exit 1
+  }
+  if ("$($env:BUILD_MODE)".ToLowerInvariant() -ne 'local') {
+    Write-Error "$registryName requires BUILD_MODE=local with the pinned components. Run 'azd env set BUILD_MODE local'; ACR Task and automatic build selection do not support these registry overrides."
+    exit 1
+  }
+}
 
 # Foundation guard (first step, before any Azure change): azd deploy only
 # deploys applications onto a foundation created by azd provision.
 $foundationMissing = (-not $globalRG) -or (-not $globalEnv.APP_CONFIG_ENDPOINT)
-if (-not $foundationMissing -and -not (ResourceGroup-Exists -rg $globalRG -subscription $globalSub)) { $foundationMissing = $true }
 if ($foundationMissing) {
   Write-Error "The foundation is not provisioned. Run azd provision first."
   exit 3
 }
+Invoke-PythonModule -ModuleName 'config.deployment.resource_groups' -Arguments @('--azure-dir', $dotAzure, '--check') | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Error "Resource-group binding check failed. No changes were made."; exit 3 }
+Invoke-PythonModule -ModuleName 'config.deployment.outputs' -Arguments @('--check-foundation')
+if ($LASTEXITCODE -ne 0) { Write-Error "Foundation destination/project verification failed. Run azd provision first."; exit 3 }
 
 # Re-validate the application definition and compare it with the binding.
 $appDefinitionPath = if ($globalEnv.AGENTLZ_APP_DEFINITION) { "$($globalEnv.AGENTLZ_APP_DEFINITION)" } elseif ($env:AGENTLZ_APP_DEFINITION) { $env:AGENTLZ_APP_DEFINITION } else { Join-Path $repoRoot 'app-definition.json' }
@@ -400,7 +420,23 @@ foreach ($c in $manifest.components) {
     Write-Host ("  ℹ️  '{0}' already exists at {1}, verifying pin." -f $name, $target) -ForegroundColor Yellow
   } else {
     try {
-      if ($refType -eq 'branch') {
+      if ($refType -eq 'branch' -and $expectedCommit) {
+        # The full commit is the pin; the branch only locates it. Clone the
+        # branch history without file contents, require the pin to be part of
+        # that history, then check out exactly the pinned commit.
+        git clone --filter=blob:none --no-checkout --branch $ref --no-progress -q $repo $target 1>$null 2>$null
+        if ($LASTEXITCODE -ne 0) {
+          throw "$name`: git clone failed."
+        }
+        git -C $target merge-base --is-ancestor $expectedCommit HEAD 1>$null 2>$null
+        if ($LASTEXITCODE -ne 0) {
+          throw "$name`: pinned commit $expectedCommit is not in the history of branch $ref."
+        }
+        git -C $target -c advice.detachedHead=false checkout -q --detach $expectedCommit 1>$null 2>$null
+        if ($LASTEXITCODE -ne 0) {
+          throw "$name`: git checkout of pinned commit $expectedCommit failed."
+        }
+      } elseif ($refType -eq 'branch') {
         git clone --depth 1 --branch $ref --no-progress -q $repo $target 1>$null 2>$null
         if ($LASTEXITCODE -ne 0) {
           throw "$name`: git clone failed."
@@ -437,6 +473,13 @@ foreach ($c in $manifest.components) {
       $hadErrors = $true
       continue
     }
+  }
+
+  $componentStatus = & git -C $target status --porcelain --untracked-files=all 2>$null
+  if ($LASTEXITCODE -ne 0 -or $componentStatus) {
+    Write-Error "$name requires a clean component checkout before building. Commit reviewed changes or use a separate clean checkout; no files were reset."
+    $hadErrors = $true
+    continue
   }
 
   # Copy shared azd env into the freshly cloned project
@@ -492,6 +535,12 @@ foreach ($dc in $definitionComponents) {
     $actualCommit = "$(& git -C $componentPath rev-parse HEAD 2>$null)".Trim()
     if ($LASTEXITCODE -ne 0 -or $actualCommit -ne $sourceCommit) {
       Write-Error "$componentName must resolve to $sourceCommit but $componentPath is at '$actualCommit'."
+      $hadErrors = $true
+      continue
+    }
+    $componentStatus = & git -C $componentPath status --porcelain --untracked-files=all 2>$null
+    if ($LASTEXITCODE -ne 0 -or $componentStatus) {
+      Write-Error "$componentName requires a clean component checkout before building. No files were reset."
       $hadErrors = $true
       continue
     }

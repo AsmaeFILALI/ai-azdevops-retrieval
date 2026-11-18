@@ -8,7 +8,7 @@
       "name": "ui",
       "kind": "containerapp",
       "path": "ui",
-      "source": { "commit": "858ed4205d866b7bfbff43ca9ed20ab812baa24e" },
+      "source": { "commit": "7ff09f49325d91018b2d443f993edf9b4cfd042d" },
       "profiles": ["blob-delegator"],
       "ingress": "external"
     },
@@ -16,7 +16,7 @@
       "name": "orchestrator",
       "kind": "containerapp",
       "path": "orchestrator",
-      "source": { "commit": "27f952fcf8d48a2ba6267c237ea6bea8361fedd2" },
+      "source": { "commit": "a825e0bd2d0a7930da55a5ef9f7d20e2d4b036e2" },
       "profiles": ["model-user", "retrieval-reader", "conversation-store"],
       "ingress": "external"
     },
