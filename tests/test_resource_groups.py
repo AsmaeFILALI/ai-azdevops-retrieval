@@ -683,6 +683,9 @@ class HookTests(ScratchTest):
                 " if ($args[1] -like '*config.appdefinition*') {\n"
                 "  Add-Content -LiteralPath $env:TRACE -Value appdefinition\n"
                 "  $global:LASTEXITCODE = [int]$env:APP_CODE\n"
+                " } elseif ($args[1] -like '*config.deployment.ingestion_state*') {\n"
+                "  Add-Content -LiteralPath $env:TRACE -Value ingestion_state\n"
+                "  $global:LASTEXITCODE = 0\n"
                 " } elseif ($args[1] -like '*config.deployment.resource_groups*') {\n"
                 "  Add-Content -LiteralPath $env:TRACE -Value resource_groups\n"
                 "  $global:LASTEXITCODE = [int]$env:RG_CODE\n"
@@ -700,6 +703,7 @@ class HookTests(ScratchTest):
             (bin_dir / "python3").write_text(
                 '#!/bin/sh\ncase "$2" in\n'
                 'config.appdefinition) echo appdefinition >> "$TRACE"; exit "$APP_CODE";;\n'
+                'config.deployment.ingestion_state) echo ingestion_state >> "$TRACE"; exit 0;;\n'
                 'config.deployment.resource_groups) echo resource_groups >> "$TRACE"; exit "$RG_CODE";;\n'
                 '*) exit 99;;\nesac\n',
                 encoding="utf-8",
@@ -711,7 +715,7 @@ class HookTests(ScratchTest):
             command = [shutil.which(shell), str(script)]
         result = subprocess.run(command, cwd=self.scratch, env=environment,
                                 capture_output=True, text=True, timeout=30)
-        expected = ["appdefinition"] + (["resource_groups"] if not app_code else [])
+        expected = ["appdefinition"] + (["ingestion_state", "resource_groups"] if not app_code else [])
         self.assertEqual(expected, trace.read_text(encoding="utf-8-sig").splitlines(), result.stdout + result.stderr)
         self.assertEqual(app_code or rg_code or 1, result.returncode, result.stdout + result.stderr)
         if not app_code and not rg_code:

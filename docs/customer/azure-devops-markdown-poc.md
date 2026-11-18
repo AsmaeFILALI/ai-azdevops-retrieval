@@ -48,7 +48,7 @@ upstream release repo/tag/commit separately for compatibility checks.
 
 | Part | Version delivered and validated |
 | --- | --- |
-| Platform (this repository) | The reviewed handover revision you received; `manifest.json` umbrella tag `v4.3.5` |
+| Platform (this repository) | The reviewed handover revision you received; `manifest.json` umbrella tag `v4.4.0` |
 | Incorporated AI Landing Zone foundation | `bicep-ptn-aiml-landing-zone` `v2.7.3` (`97e2375b89dcda4900d75aac9e7ffb7b20cce165`) |
 | UI | Commit `7ff09f49325d91018b2d443f993edf9b4cfd042d` (upstream base `v3.3.0`); image tag `frontend:7ff09f4` |
 | Orchestrator | Commit `a825e0bd2d0a7930da55a5ef9f7d20e2d4b036e2` (upstream base `v5.2.1`); image tag `orchestrator:a825e0b` |

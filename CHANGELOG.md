@@ -1,6 +1,25 @@
 # Changelog
 
-## [Unreleased]
+## [v4.4.0] - 2026-11-18
+
+### Added
+- Configurable application, Foundry and network resource groups, with explicit
+  destination bootstrap and binding guards. The single-resource-group default
+  is unchanged; both hook variants behave identically.
+- Opt-in Azure DevOps Markdown Search index generation with a versioned
+  consumer contract (`contracts/ado-markdown-index-consumer-v1.json`),
+  template-driven schema selection and source/heading/provenance citation
+  projection (ADR-0024).
+- Template-managed point-to-site VPN and Container Apps private DNS for private
+  operator access (ADR-0025), with Windows split-DNS profile guidance.
+- Integrated private ingestion control-state storage in the main application
+  resource group (`DEPLOY_INGESTION_STATE_STORE`), with container-scoped writer
+  role reconciliation during connected post-provision (ADR-0026).
+- Portable customer deployment profile, generated Cosmos naming, explicit
+  retrieval strategy publication and an offline, schema-pinned worker handoff
+  exporter (`config/deployment/ingestion_handoff.py`) (ADR-0027).
+- Corporate PyPI and npm registries for local builds (`PIP_INDEX_URL`,
+  `NPM_CONFIG_REGISTRY`), validated as credential-free HTTPS by both hooks.
 
 ### Changed
 - Include a self-contained customer deployment documentation bundle in this
@@ -35,8 +54,31 @@
   from Docker contexts and neutralize oversized streamed citation links.
 - Compare the committed infrastructure seed, not its intentionally generated
   working copy, with portability inputs; cover normal pre-provision generation.
+- Discover capability-role scopes through provider-specific resource
+  inventories, retaining exact ownership and ambiguity checks.
+- Allow 30 seconds for Azure CLI and managed-identity credentials during Search
+  setup, matching the configuration loader.
+- Validate reviewed VPN graph changes against the historical resource contracts
+  and reject unreviewed VPN and private-DNS mutations.
+- Restore CI on clean Linux runners with pinned compiler and utility test
+  dependencies.
 
-## [v4.3.5] - 2026-10-26
+### Validation
+
+| Component | Version |
+| --- | --- |
+| agent-app-ui | fork `AsmaeFILALI/agent-app-ui` branch `feature/customer-build-feeds` at `7ff09f49325d91018b2d443f993edf9b4cfd042d` (upstream v3.3.0) |
+| agent-app-orchestrator | fork `AsmaeFILALI/agent-app-orchestrator` branch `feature/citation-guard` at `a825e0bd2d0a7930da55a5ef9f7d20e2d4b036e2` (upstream v5.2.1) |
+| agent-app-ingestion | v3.1.1 |
+| infra / AI Landing Zone | v2.7.3 |
+
+- Deployed this exact UI/orchestrator combination to a private classic
+  validation environment (`BUILD_MODE=local`, corporate package feeds,
+  anonymous access); both Container Apps healthy. Retrieval through the
+  knowledge base succeeds after the Search shared private links are approved.
+- Pass the CI-equivalent suite (`python -m pytest tests config/search/tests`).
+- Markdown worker delivered separately: `AsmaeFILALI/ado-index-worker`
+  `0.2.0`; first publication remains a customer-run gate.
 
 ### Changed
 - Rename the subscription header to "Agent Landing Zone - prod subscription"
