@@ -74,7 +74,13 @@ The customer-facing delivery repository is
 `https://github.com/AsmaeFILALI/ado-index-worker`; its `main` initial public
 release is `fdbf2b225b9a5042971b664cd0db12ef92688745` (2026-11-17). Confirm
 that release contains the reviewed WRK-01 integration before treating WRK-01
-and WRK-02 as complete, and record the reviewed tag/commit the customer pins.
+and WRK-02 as complete. That commit is source provenance; any pipeline pin
+refers to the customer's own Azure DevOps worker repository after its
+configuration commit (POC may run unpinned on protected `main`).
+
+POC decision: publication is approved with the worker's
+`admission_waiver`, recorded as an owner decision, even though `kb-sections-v1`
+serves the POC chat. Content admission is deferred until users request it.
 
 Previous source was `generalisation` at `335df34`. The separately committed
 handoff guidance is on `feature/platform-handover-docs` at `868ad3a`; it is not
@@ -86,11 +92,11 @@ Paths in this table are relative to the **worker repository**, not this platform
 | ID | Remaining todo | Dependency / done condition | Original tasks |
 | --- | --- | --- | --- |
 | WRK-01 | Combine the reviewed `generalisation` changes with `feature/platform-handover-docs`, preserving both sets of `docs/`, `examples/` and identity-script changes. | Isolated combination already passes 79 tests; make the actual reviewed integration and validate that exact resulting worker revision. | T003, T027 |
-| WRK-02 | Publish the integrated worker source through the customer's approved repository/PR flow and select its immutable delivery revision. | After WRK-01 and repository-access approval; protect the publishing-code branch and pin the template ref plus full commit in `examples/content-repo/azure-pipelines.yml`. Tags require explicit approval. | T003, T027 |
-| WRK-03 | Prepare the worker's WIF service connection, explicit service-principal IDs, protected pipeline environment, repository checkout permissions and approved private agent pool. | Customer administrator approval. Supply the actual writer object ID to LZ-04 before state-store deployment. After networking exists, verify the publishing agent's private routing/DNS; a laptop VPN is insufficient. Use `scripts/New-IngestionIdentity.ps1` in preview first, then apply only approved scopes. | T003, T025, T026 |
-| WRK-04 | Fill customer `config/<name>/pipeline-source.toml`, `publishing-config.toml`, exact schema/hash and reviewed admission inputs. | Requires LZ-05 outputs and WRK-03 identity. Set approved repository/ref/path rules and API versions; retain `enablePublishing=false` initially. Do not copy our service names or infer admission from the export. | T003, T026, T027 |
+| WRK-02 | Import the integrated worker source into the customer's Azure DevOps repository and decide whether the POC pipeline is pinned. | After WRK-01 and repository-access approval; protect `main`. A pin is a customer-repository tag plus full commit after the `config/<name>/` commit. Tags require explicit approval. | T003, T027 |
+| WRK-03 | Prepare the worker's WIF service connection (runbook step 5, manual option), explicit service-principal IDs, protected pipeline environment, repository checkout permissions and a self-hosted agent in `devops-build-agents-subnet`. | Customer administrator approval. Supply the actual writer object ID to LZ-04 before state-store deployment. The network owner must provide approved egress for the agent subnet (the NAT gateway is not attached to it). After provisioning, run `scripts/New-IngestionIdentity.ps1 -ExistingAppId` in preview first, then apply. | T003, T025, T026 |
+| WRK-04 | Fill customer `config/<name>/pipeline-source.toml`, `publishing-config.toml`, exact schema/hash and the recorded `admission_waiver`. | Requires LZ-05 outputs and WRK-03 identity. Use handoff values (`search_schema_api_version = 2025-05-01-preview`, exact `embedding_endpoint`); retain `enablePublishing=false` initially. Do not copy our service names. | T003, T026, T027 |
 | WRK-05 | Validate the actual customer Azure DevOps template/job using the pinned worker, approved pool and exact immutable source commit. | Requires WRK-02-WRK-04. Record successful offline validation and checkout/toolchain/approval behavior without enabling publication. Existing local tests do not prove Azure DevOps execution. | T024, T026 |
-| WRK-06 | After separate source/data approval, run first publication, no-change rerun and interrupted-run recovery on an explicitly admitted target. | Requires WRK-05 and LZ-05. Verify documents, checkpoints, journals/lease behavior and no unnecessary embeddings/writes. A test waiver is valid only for a currently non-serving target. Supply results to LZ-06. | T026, T027 |
+| WRK-06 | After separate source/data approval, run first publication, no-change rerun and interrupted-run recovery on the waiver-approved POC index. | Requires WRK-05 and LZ-05. The index must not yet contain that source's documents; synthetic or approved common-audience content only. Verify documents, checkpoints, journals/lease behavior and no unnecessary embeddings/writes. Replace the waiver with an admission before real or restricted content. Supply results to LZ-06. | T026, T027 |
 
 Worker ownership ends at document publication and control-state correctness.
 It does not own Azure foundation deployment, Search schema administration,

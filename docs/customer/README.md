@@ -11,7 +11,7 @@ is not required.
 | [Deployment runbook](azure-devops-markdown-poc.md) | Prerequisites, new environment, phased deployment, state storage, worker handoff, development, acceptance and recovery |
 | [Configuration and ownership](configuration.md) | Environment boundaries, component pins, index/schema, embeddings, retrieval/citations, build feeds and pipeline responsibilities |
 | [Private access](private-access.md) | Template-managed VPN, DNS, connected configuration, private build/agent access and diagnosis |
-| [Application authentication](application-auth.md) | Customer Entra registration, runtime settings, admission and authentication acceptance |
+| [Application authentication](application-auth.md) | Customer Entra registration, runtime settings, allowed users and authentication acceptance |
 
 Commands assume the repository root, not this documentation directory.
 Use the [customer profile](../../samples/customer-poc/azd-env.example.json) and

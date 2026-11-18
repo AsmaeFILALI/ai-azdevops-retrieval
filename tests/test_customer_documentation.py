@@ -133,3 +133,15 @@ def test_runbook_covers_search_outbound_approval_access_modes_and_worker_source(
     assert "Keep `ALLOW_ANONYMOUS=false`" not in guide
     plan = (ROOT / "docs" / "plans" / "customer-deployment-handover.md").read_text(encoding="utf-8")
     assert "Use `infra/ingestion-state.bicep` separately" not in plan
+
+
+def test_runbook_aligns_waiver_poc_with_worker_guide():
+    guide = (DOCS / "azure-devops-markdown-poc.md").read_text(encoding="utf-8")
+    for required in (
+        "admission_waiver", "--serving-status serving", "**Not** the worker example's `2025-09-01`",
+        "SEARCH_SERVICE_RESOURCE_ID", "ExistingAppId", "### Provide the private publishing agent",
+        "devops-build-agents-subnet", "skip the worker guide's Step 3.1",
+    ):
+        assert required in guide
+    for stale in ("<serving-or-non-serving>", "<main-deployment>", "No release tag exists yet"):
+        assert stale not in guide
