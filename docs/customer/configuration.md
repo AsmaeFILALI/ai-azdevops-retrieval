@@ -160,12 +160,15 @@ review of old grants.
 The independent worker owns document synchronization, embeddings, leases,
 run intents and checkpoints. Its schema-read, document-write, inference, state,
 repository checkout and WIF permissions are separate.
-Use its delivered source/publishing TOML, source admission and publishing
-templates. Application/foundation promotion YAML from the general documentation
+Use its delivered source/publishing TOML and pipeline templates; this POC
+approves publication with an owner waiver rather than a content admission
+([runbook step 7](azure-devops-markdown-poc.md#decisions-for-this-poc)).
+Application/foundation promotion YAML from the general documentation
 is not that worker's ingestion pipeline.
 
-The worker must run on an approved private-network-connected agent. A VPN on
-a developer laptop does not give Microsoft-hosted agents private connectivity.
-Do not admit protected documents until the permission contract and negative
-retrieval tests are approved; source-repository permissions are not copied
-automatically into Search.
+The worker must run on an approved self-hosted agent with private DNS and
+egress ([runbook step 7](azure-devops-markdown-poc.md#provide-the-private-publishing-agent)).
+A VPN on a developer laptop does not give Microsoft-hosted agents private
+connectivity. Do not publish protected documents until the permission contract
+and negative retrieval tests are approved; source-repository permissions are
+not copied automatically into Search.

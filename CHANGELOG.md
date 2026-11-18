@@ -22,6 +22,12 @@
   Foundry account, an anonymous-by-default/authenticated-opt-in access-mode
   choice, retrieval smoke tests and the `ado-index-worker` delivery in the
   customer runbook.
+- Align the customer runbook with the worker's deployment guide for a
+  waiver-approved POC: explicit owner waiver instead of content admission,
+  `serving` handoff status, main-deployment lookup, handoff-to-worker value
+  mapping (preview schema API version), identity-script inputs, the
+  customer-repository worker pin and self-hosted private publishing agent
+  requirements, including agent-subnet egress.
 - Preserve genuine upstream release provenance separately from fork source
   locator tags so Search/runtime compatibility checks still enforce their
   minimum version. Include Search contracts in deployment CI.

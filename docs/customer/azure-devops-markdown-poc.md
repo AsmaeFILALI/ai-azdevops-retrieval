@@ -52,7 +52,7 @@ upstream release repo/tag/commit separately for compatibility checks.
 | Incorporated AI Landing Zone foundation | `bicep-ptn-aiml-landing-zone` `v2.7.3` (`97e2375b89dcda4900d75aac9e7ffb7b20cce165`) |
 | UI | Commit `7ff09f49325d91018b2d443f993edf9b4cfd042d` (upstream base `v3.3.0`); image tag `frontend:7ff09f4` |
 | Orchestrator | Commit `a825e0bd2d0a7930da55a5ef9f7d20e2d4b036e2` (upstream base `v5.2.1`); image tag `orchestrator:a825e0b` |
-| Markdown worker | `ado-index-worker` commit `fdbf2b225b9a5042971b664cd0db12ef92688745`, package `ado-markdown-ingestion` `0.2.0`; no release tag yet ([step 7](azure-devops-markdown-poc.md#7-onboard-the-independent-worker)) |
+| Markdown worker | Delivered source: `ado-index-worker` commit `fdbf2b225b9a5042971b664cd0db12ef92688745`, package `ado-markdown-ingestion` `0.2.0` ([step 7](azure-devops-markdown-poc.md#host-and-pin-the-worker)) |
 
 Image tags are the first seven characters of the source commit and are mutable
 names; record the pushed image **digests** from your own build as the
@@ -91,7 +91,8 @@ Steps are grouped by topic; follow this order:
    ([step 4](azure-devops-markdown-poc.md#4-configure-authentication-and-deploy-applications)).
 7. Verify the state writer role, then export the schema and worker handoff
    ([steps 5](azure-devops-markdown-poc.md#writer-roles-are-part-of-post-provision) and [6](azure-devops-markdown-poc.md#6-export-a-reviewed-worker-handoff)).
-8. Onboard the worker, publish, and rerun the smoke tests
+8. Provide the private publishing agent, run the worker identity script, onboard
+   the worker, publish and rerun the smoke tests
    ([step 7](azure-devops-markdown-poc.md#7-onboard-the-independent-worker)).
 9. Complete [acceptance](azure-devops-markdown-poc.md#acceptance-troubleshooting-and-recovery) and record versions and digests.
 
@@ -435,7 +436,7 @@ changes nothing, because the platform does not publish that key.
 
 | | Anonymous (default) | Authenticated (opt-in) |
 | --- | --- | --- |
-| Who can chat | Anyone who can reach the private UI through the VPN | Signed-in customer-tenant users, optionally restricted by admission lists |
+| Who can chat | Anyone who can reach the private UI through the VPN | Signed-in customer-tenant users, optionally restricted by allowed-user lists |
 | `ALLOW_ANONYMOUS` (App Configuration, `agent-lz`) | `true` | `false` |
 | `OAUTH_AZURE_AD_*`, `CHAINLIT_AUTH_SECRET` | **Must stay unset** | Required; see [application authentication](application-auth.md) |
 | Retrieval identity | Service identity only; every user can retrieve all indexed content | Service identity plus the user's forwarded token; the index has no permission filter, so results are not trimmed per document |
@@ -687,7 +688,8 @@ The deployment principal needs role-assignment authority at that container
 (or an authorized ancestor), management-plane reads and permission to read the
 approved Entra service principal. State access alone does not grant the worker
 Search schema-read/document-write, embedding inference or repository access.
-Those worker permissions still require their own approved setup.
+The worker's identity script grants those after provisioning
+([step 7](azure-devops-markdown-poc.md#map-platform-values-into-the-worker-configuration)).
 
 If a standalone state store already contains checkpoints in another resource
 group, stop and review migration before enabling this path. No account is moved,
@@ -698,11 +700,21 @@ recovery protocol before resuming.
 
 ## 6. Export a reviewed worker handoff
 
-Capture **full successful deployment snapshots**, not raw environment dumps:
+Capture **full successful deployment snapshots**, not raw environment dumps.
+`azd provision` names the main deployment after the environment followed by a
+number (for example `<environment>-1794597765`); look up the latest successful
+one first:
 
 ```powershell
+$environment = '<environment>'
+$deployments = az deployment group list --subscription <subscription> --resource-group <app-rg> --output json | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { throw 'Cannot list deployments.' }
+$mainDeployment = ($deployments |
+  Where-Object { $_.name -match "^$([regex]::Escape($environment))-\d+$" -and $_.properties.provisioningState -eq 'Succeeded' } |
+  Sort-Object { [datetime]$_.properties.timestamp } | Select-Object -Last 1).name
+if ([string]::IsNullOrWhiteSpace($mainDeployment)) { throw 'Main deployment not found.' }
 az deployment group show --subscription <subscription> --resource-group <app-rg> `
-  --name <main-deployment> --output json > .\.local\main-deployment.json
+  --name $mainDeployment --output json > .\.local\main-deployment.json
 az deployment group show --subscription <subscription> --resource-group <app-rg> `
   --name ingestionControlState `
   --output json > .\.local\state-deployment.json
@@ -825,70 +837,145 @@ python -m config.deployment.ingestion_handoff `
   --state-deployment .\.local\state-deployment.json `
   --platform-schema $schemaPath `
   --schema-sha256 <owner-reviewed-sha256> --index-name $azdEnvironment.SEARCH_RAG_INDEX_NAME `
-  --serving-status <serving-or-non-serving> `
+  --serving-status serving `
   --search-schema-api-version 2025-05-01-preview `
   --output .\.local\ingestion-handoff.json
 ```
 
+Use `serving` for this profile: the knowledge base and chat application query
+this index directly, and the exporter refuses `non-serving` for an index the
+main deployment binds. Use `<owner-reviewed-sha256>` from the `.sha256` file
+reviewed above.
+
 This exporter is offline and allowlists bindings. It verifies successful
 snapshots, environment/subscription/account consistency, embedding settings
 and exact pinned schema. It refuses to overwrite inputs or existing outputs.
-It does not prove live access, change an index, create admission or declare a
-test target safe. `serving-status` is an explicit owner assertion, not an
-inference from a name containing `test`. A serving target must match the main
-deployment's recorded binding; verify current Azure bindings separately.
+It does not prove live access, change an index or authorize publication.
+`serving-status` is an explicit owner assertion, not an inference from a name
+containing `test`. Verify current Azure bindings separately.
 
-The `publishing` object maps to the worker publishing TOML, except that local
-schema path, WIF client/service-connection IDs and admission remain owner inputs.
-Use `embedding` for source model/deployment/dimensions. Ensure the actual
-publishing principal has its own grants. Treat deployment snapshots as private
-working evidence; only the allowlisted handoff is intended for transfer.
-Review it under the customer's data policy.
+Treat deployment snapshots as private working evidence; only the allowlisted
+handoff is intended for transfer. Review it under the customer's data policy.
+[Step 7](azure-devops-markdown-poc.md#map-platform-values-into-the-worker-configuration)
+maps each handoff value into the worker's files.
 
 ## 7. Onboard the independent worker
 
-The worker is delivered from its own public repository:
-`https://github.com/AsmaeFILALI/ado-index-worker`. It is not part of this
-platform repository, and this guide does not replace its documentation. The
-delivered revision is the initial public release on `main`: commit
+The worker publishes your Markdown into the index. It comes from its own public
+repository, `https://github.com/AsmaeFILALI/ado-index-worker`, and its
+`docs/deployment.md` is the step-by-step guide. Follow it, with the decisions
+and values below. They replace the choices that guide leaves open, so the two
+guides agree.
+
+### Decisions for this POC
+
+| Topic | This POC | Worker guide reference |
+| --- | --- | --- |
+| Approval | **Waiver only.** Set `admission_waiver` to a recorded owner decision. Do not create admission files or their secure files. Admission can be added later | Steps 5.4 and 5.6 |
+| Target index | The serving `kb-sections-v1` index that chat uses (see the note below) | Step 1 |
+| Content | Synthetic or explicitly approved common-audience content only | Step 1 |
+| Network | Private-only Search, OpenAI and Storage: **self-hosted agent required** for publishing | Steps 1 and 4.3 |
+| Worker pin | Optional for the POC; pin before real content | Step 7 |
+| Service connection | Create it once, in [step 5](azure-devops-markdown-poc.md#create-the-azure-devops-service-connection-before-provisioning) here; **skip the worker guide's Step 3.1** | Step 3 |
+
+> **Waiver on the serving index.** The worker guide describes the waiver for a
+> *non-serving* test index. In this POC the same index also serves chat, so
+> the waiver is used under an explicit owner decision with these conditions:
+> the content is synthetic or approved for every user who can reach the
+> application (in anonymous mode, everyone on the VPN), there are no
+> production users, and no document permissions are claimed. Record the
+> decision in the waiver text, for example
+> `"POC owner decision <date>: serving POC index, common-audience content only, no permissions claimed"`.
+> The waiver also refuses a first publication over documents that already
+> exist for the same repository and branch; publish each source into an index
+> that has none of its documents yet. Before
+> real or restricted content or production users, replace the waiver with an
+> admission (worker `docs/operations.md` section 4).
+
+### Host and pin the worker
+
+Worker guide Step 2 imports the code into a repository in the **customer's**
+Azure DevOps project. Import the delivered source revision: commit
 `fdbf2b225b9a5042971b664cd0db12ef92688745`, package `ado-markdown-ingestion`
-`0.2.0`. **No release tag exists yet.** The worker guide's Step 7 pins
-production pipelines to a tag plus `workerCommit`; until an approved tag is
-published, pin that full commit and record it. A branch name alone is not a pin.
+`0.2.0`. Record it as the delivered source; it is not the pipeline pin.
+Step 5 then adds `config/<name>/` to that repository, which creates a new
+commit there. Any pin (worker guide Step 7: a tag such as `v0.2.0` plus
+`workerCommit`) refers to that **customer repository** commit, not to the
+GitHub commit. For the POC the pipeline may track `main` unpinned; protect
+`main` with required review.
+
+### Map platform values into the worker configuration
+
+| Worker value | Take it from | Note |
+| --- | --- | --- |
+| `search_endpoint`, `index_name`, `embedding_endpoint`, `openai_api_version`, `state_account_url`, `state_container`, `schema_sha256` (worker Step 5.4) | `publishing` in `.local\ingestion-handoff.json` ([step 6](azure-devops-markdown-poc.md#6-export-a-reviewed-worker-handoff)) | Copy exactly. `embedding_endpoint` has no trailing slash and must equal the schema's vectorizer `resourceUri`; do not copy the endpoint from App Configuration |
+| `search_schema_api_version` | `publishing.search_schema_api_version`: `2025-05-01-preview` | **Not** the worker example's `2025-09-01`. The platform schema uses preview permission properties; a stable version fails with "Deployed schema differs" |
+| `deployment`, `model`, `dimensions` (worker Step 5.3) | `embedding` in the handoff | `text-embedding`, `text-embedding-3-large`, `3072` |
+| Schema file `config/<name>/<index>.schema.json` (worker Step 5.5) | The exported `.local/<environment>-index.schema.json` | Copy the bytes unchanged (LF). The worker recomputes the same SHA-256 |
+| `tenant_id`, `client_id`, `service_connection_id` | The service connection from step 5 | Look them up as in worker Step 8.2 |
+| `admission_waiver` | The recorded owner decision above | 20+ characters, not the template placeholder |
+
+Then run the worker's identity script (worker Steps 3.2 and 3.3) **after
+provisioning**, from the worker repository, with these values:
+
+| Script parameter | Value |
+| --- | --- |
+| `TenantId`, `SubscriptionId` | `tenant_id` and `subscription_id` in the handoff |
+| `SearchServiceResourceId` | App Configuration key `SEARCH_SERVICE_RESOURCE_ID` (label `agent-lz`) |
+| `IndexName` | `publishing.index_name` |
+| `OpenAIResourceId` | `resources.openai_resource_id` in the handoff (the Foundry account) |
+| `StateContainerResourceId` | `resources.state_container_resource_id` in the handoff |
+| `ExistingAppId` | The service connection's application (client) ID from step 5 |
+
+Run it in preview first, then with `-Apply`. It grants the index, model and
+schema-reader roles; its container role duplicates the grant that platform
+post-provisioning already made, which is harmless. The script creates a custom
+role on the Search resource group, so it needs an administrator with
+role-definition and role-assignment rights there.
+
+### Provide the private publishing agent
+
+Publishing must run on a self-hosted Azure DevOps agent that resolves the
+private endpoints and reaches them on port 443 (worker Step 4.3). Microsoft-hosted
+agents cannot reach them, and your laptop's VPN does not extend to them. For
+short POC runs, a self-hosted agent on a machine connected to the
+[point-to-site VPN with private DNS](private-access.md#prepare-windows-split-dns-settings)
+works while that machine stays connected. For anything sustained, the platform reserves
+`devops-build-agents-subnet` (`10.77.3.96/27`) in the workload VNet for this,
+but **does not deploy an agent**. A VM in that subnet resolves private
+endpoints through the VNet's linked private DNS zones.
+
+The agent also needs outbound HTTPS to Azure DevOps, Microsoft Entra ID and its
+package/tokenizer sources (or the worker's offline `toolchain: local`). In the
+validated deployment, the NAT gateway is attached only to `jumpbox-subnet` and
+`aca-environment-subnet`. Have the network owner provide approved egress for
+the agent subnet, for example by associating the existing NAT gateway, before
+installing the agent. Then install Python 3.12, `uv`, Git, PowerShell 7 and the
+Azure CLI, and register the agent in a pool authorized only for the ingestion
+pipeline. Verify name resolution and port 443 to the Search, OpenAI and Blob
+endpoints from the agent before the first publication.
+
+### Run and verify
+
+Start with `enablePublishing=false` and validate offline (worker Steps 6 and 8).
+With owner sign-off, run the first `sync` (worker Step 9), then the worker
+Step 10 checks: documents and citations, state blobs, an unchanged rerun with
+`upserts: 0` and `embedding_calls: 0`, and a single changed file. Rerun the
+[retrieval smoke tests](azure-devops-markdown-poc.md#approve-search-outbound-access-to-the-embedding-model)
+and ask a known-answer question in chat. Rehearse interrupted-run recovery.
 
 | Worker file | Use |
 | --- | --- |
-| `docs/deployment.md` | Step-by-step setup: hosting the worker, configuration files, local rehearsal, tagging/pinning, pipeline creation and first publication. Its Step 3 creates the **same** service connection as [step 5](azure-devops-markdown-poc.md#5-integrated-control-state-store-and-worker-identity) here; create it once. Its Step 5.5 takes the schema and hash from [step 6](azure-devops-markdown-poc.md#6-export-a-reviewed-worker-handoff); Appendix A maps the platform handoff to worker configuration. |
-| `docs/operations.md`, `docs/limitations.md` | Day-2 operation, recovery and known limits |
-| `examples/pipeline-source.toml`, `examples/publishing-config.toml`, `examples/worker-config.toml` | Customer source, publishing and worker configuration templates |
-| `examples/admission.template.json`, `examples/admission.scope.template.json` | Content-admission inputs |
-| `examples/content-repo/azure-pipelines.yml` | Pipeline for the content repository; pin the worker template ref **and** full commit |
-| `scripts/New-IngestionIdentity.ps1` | Publishing-identity setup; run in preview first and apply only approved scopes |
+| `docs/deployment.md` | Step-by-step setup; follow it with the decisions and mappings above |
+| `docs/operations.md`, `docs/limitations.md` | Day-2 operation, recovery, the waiver and later admission models, known limits |
+| `examples/pipeline-source.toml`, `examples/publishing-config.toml` | Templates for the two configuration files |
+| `examples/content-repo/azure-pipelines.yml` | Pipeline for each content repository |
+| `scripts/New-IngestionIdentity.ps1` | Worker role assignments |
 | `pyproject.toml`, `uv.lock` | Locked Python 3.12 dependencies |
 
-Use the **platform-rendered schema and checksum** from step 6 for the target
-index. The worker's `examples/index-schema*.json` files are illustrations, not
-a substitute. Use the same publishing identity whose service-principal object
-ID was supplied in [step 5](azure-devops-markdown-poc.md#5-integrated-control-state-store-and-worker-identity).
-If the customer cannot reach GitHub, arrange an approved mirror of that exact
-commit rather than copying a local checkout.
-
-Prepare source repository ID, full ref, immutable commit and include/exclude
-rules; platform schema/hash; protected environment; and service
-connection authorized only to the ingestion pipeline.
-The worker needs selected-index document access, separate read-only schema
-permission, OpenAI inference and exact container-scoped Blob permission.
-Search's query vectorizer additionally needs the approved outbound private link
-from [step 3](azure-devops-markdown-poc.md#approve-search-outbound-access-to-the-embedding-model); the
-worker's own embedding calls go through its private agent network instead.
-Repository Build Service checkout permissions are separate.
-
-Private publication requires an approved VNet-connected agent with private DNS.
-A laptop VPN does not connect Microsoft-hosted agents. Start with
-`enablePublishing=false`; validate the exact source offline. Only after owner
-approval run first publication, verify checkpoints/documents, repeat unchanged
-and verify no new embedding/document work. Rehearse interrupted-run recovery.
-Never use an unsigned test waiver against an index already serving users.
+Use the platform-rendered schema, never the worker's `examples/index-schema*.json`.
+If the customer cannot reach GitHub, arrange an approved mirror of the delivered
+commit. Repository Build Service checkout permissions are separate (worker Step 4.2).
 
 ## 8. Local development
 
@@ -948,10 +1035,15 @@ Startup in the customer's selected access mode remains an acceptance check.
 | `azd deploy` reports `pinned commit ... is not in the history of branch ...` | The source branch was rewritten or the pin is wrong; restore the branch or review the pin; do not edit the hook |
 | Build fails downloading Python/npm packages | [Package registry settings](azure-devops-markdown-poc.md#configure-package-registries-before-building) |
 | Hooks report public DNS answers | [Private access](private-access.md#verify-dns-routing-and-service-access) |
+| Worker reports "Deployed schema differs" | `search_schema_api_version` is not `2025-05-01-preview`, or the schema file was edited; [use the handoff values](azure-devops-markdown-poc.md#map-platform-values-into-the-worker-configuration) |
+| Worker run cannot resolve or reach Search, OpenAI or Blob | The job ran on a Microsoft-hosted agent or an agent without private DNS/egress; [use the private agent](azure-devops-markdown-poc.md#provide-the-private-publishing-agent) |
+| Exporter refuses `non-serving` | This index is bound by the main deployment; use `serving` as in [step 6](azure-devops-markdown-poc.md#6-export-a-reviewed-worker-handoff) |
 
 Azure DevOps permissions are not automatically copied into Search. Until an
 approved permission contract and allow/deny tests pass, use synthetic or
-explicitly admitted common-audience non-sensitive content only. Authentication,
+explicitly approved common-audience non-sensitive content only. This POC
+publishes under an owner waiver, not an admission
+([step 7](azure-devops-markdown-poc.md#decisions-for-this-poc)). Authentication,
 private networking and fluent answers do not establish document authorization.
 In anonymous mode every VPN user can retrieve everything in the index.
 

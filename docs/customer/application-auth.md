@@ -23,7 +23,8 @@ Have the customer identity administrator:
    owner. Store the credential value in customer Key Vault, never in the
    profile JSON, source control, browser configuration or deployment logs.
 5. Approve allowed users and the identities/roles used by the running services.
-   Subscription roles, UI admission and source/document permissions are distinct.
+   Subscription roles, UI allowed-user lists and source/document permissions
+   are distinct.
 
 ## Required UI runtime configuration
 
@@ -50,15 +51,15 @@ The profile also publishes `CHAT_BACKEND=orchestrator` and selects `maf_lite`.
 Preserve the deployed classic inter-service authentication and approved
 orchestrator binding. Hosted-specific Foundry OBO settings are not substitutes.
 
-## Admission
+## Allowed users
 
 `ALLOWED_USER_PRINCIPALS` accepts comma-separated `tenant-id:object-id` values.
 `ALLOWED_USER_NAMES` is an alternative list of sign-in names. They combine with
-**OR**; empty lists admit all successfully authenticated users. Configure them
+**OR**; empty lists allow all successfully authenticated users. Configure them
 deliberately for the approved POC audience.
 
-The callback does not fetch Graph group membership. These lists restrict UI
-admission, not per-document retrieval. The UI caches configuration at startup;
+The callback does not fetch Graph group membership. These lists restrict who
+can use the UI, not per-document retrieval. The UI caches configuration at startup;
 after approved changes reload/redeploy the process and start a fresh sign-in.
 Provisioning can republish template-owned settings.
 
@@ -67,7 +68,7 @@ Provisioning can republish template-owned settings.
 - A signed-out caller cannot chat.
 - An approved user signs in through the exact callback, reaches the UI and can
   query the intended orchestrator.
-- A user absent from both **nonempty** admission lists is denied.
+- A user absent from both **nonempty** allowed-user lists is denied.
 - Session-signing state remains compatible across intended restarts/instances.
 - A different user cannot open another user's conversation history.
 - Tokens, credentials and document contents are not printed as test evidence.
@@ -83,4 +84,4 @@ measure; changing modes is a deliberate owner decision.
 Azure DevOps repository permissions are not automatically propagated into
 Search. Until an approved document-permission contract and independent-user
 allow/deny tests pass, this profile is restricted to synthetic or explicitly
-admitted common-audience non-sensitive content.
+approved common-audience non-sensitive content.
