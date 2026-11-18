@@ -13,6 +13,15 @@
   are implied; bundled ingestion and foundation provenance are unchanged.
 
 ### Fixed
+- Deploy the exact pinned component commit when its source branch has moved
+  past the pin. Fresh checkouts clone the branch history, require the pin to be
+  part of it and check out that commit; existing sibling folders are never
+  reset. Previously a moved branch made fresh customer deployments fail the
+  pin check. PowerShell and Bash hooks behave identically.
+- Document the required approval of Search's outbound private links to the
+  Foundry account, an anonymous-by-default/authenticated-opt-in access-mode
+  choice, retrieval smoke tests and the `ado-index-worker` delivery in the
+  customer runbook.
 - Preserve genuine upstream release provenance separately from fork source
   locator tags so Search/runtime compatibility checks still enforce their
   minimum version. Include Search contracts in deployment CI.

@@ -385,7 +385,20 @@ while IFS= read -r comp; do
   if [ -d "$target" ]; then
     yellow "  ℹ️  '$name' already exists at $target, verifying pin."
   else
-    if [ "$ref_type" = "branch" ]; then
+    if [ "$ref_type" = "branch" ] && [ -n "$expected_commit" ]; then
+      # The full commit is the pin; the branch only locates it. Clone the
+      # branch history without file contents, require the pin to be part of
+      # that history, then check out exactly the pinned commit.
+      if ! git clone --filter=blob:none --no-checkout --branch "$ref" --quiet "$repo" "$target" >/dev/null 2>&1; then
+        red "$name: git clone failed."; had_errors=1; continue
+      fi
+      if ! git -C "$target" merge-base --is-ancestor "$expected_commit" HEAD >/dev/null 2>&1; then
+        red "$name: pinned commit $expected_commit is not in the history of branch $ref."; had_errors=1; continue
+      fi
+      if ! git -C "$target" -c advice.detachedHead=false checkout -q --detach "$expected_commit" >/dev/null 2>&1; then
+        red "$name: git checkout of pinned commit $expected_commit failed."; had_errors=1; continue
+      fi
+    elif [ "$ref_type" = "branch" ]; then
       if ! git clone --depth 1 --branch "$ref" --quiet "$repo" "$target" >/dev/null 2>&1; then
         red "$name: git clone failed."; had_errors=1; continue
       fi

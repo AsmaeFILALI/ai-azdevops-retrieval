@@ -18,9 +18,9 @@ repository root. No separate documentation checkout or website build is needed.
 The platform and runtime components are separate repositories. Obtain the UI
 and orchestrator revisions pinned by [manifest.json](../../manifest.json) and
 [app-definition.json](../../app-definition.json), plus a reviewed immutable
-revision of the independent Markdown worker. Customer access to that worker,
-its templates and the component source must be arranged separately. If only
-this repository is accessible, see the [source-delivery blocker](README.md#documentation-is-local-application-source-is-still-separate).
+revision of the independent Markdown worker from
+`https://github.com/AsmaeFILALI/ado-index-worker` (see [step 7](azure-devops-markdown-poc.md#7-onboard-the-independent-worker)).
+If only this repository is accessible, see the [source-delivery blocker](README.md#documentation-is-local-application-source-is-still-separate).
 Never copy a developer's dirty component checkout or registry credentials.
 
 The customer branch selects runtime fixes from public forks:
@@ -31,19 +31,69 @@ The customer branch selects runtime fixes from public forks:
 | `AsmaeFILALI/agent-app-orchestrator` | `feature/citation-guard` | `a825e0bd2d0a7930da55a5ef9f7d20e2d4b036e2` |
 
 These are reviewed source candidates, not newly published upstream releases.
-Component tag fields are intentionally empty. The deployer uses the branch
-to fetch source and verifies its full commit before building; moving a branch
-to a different commit fails the pin check. Matching app-definition commits
-are updated together with the manifest. Each fork records its genuine upstream
-release repo/tag/commit separately for compatibility checks.
+Component tag fields are intentionally empty. The **full commit is the pin**;
+the branch only locates the repository. `azd deploy` clones the branch history,
+requires the pinned commit to be part of it, and checks out exactly that
+commit; it stops if the pin is missing from the branch. Matching app-definition
+commits are updated together with the manifest. Each fork records its genuine
+upstream release repo/tag/commit separately for compatibility checks.
 
-Initial candidate images at UI `132f70b` and orchestrator `7220406` passed
-clean Linux/amd64 builds with a credential-free HTTPS mirror. The later
-review fixes selected above pass focused regression/renderer and explicit
-build-exclusion checks. Docker engine errors prevented rebuilding those latest
-revisions and executing their synthetic layer-export checks during handover
-validation. Run those tests and build the selected revisions on a working
-customer runner. Publishing source does not update an Azure application.
+> The UI branch `feature/customer-build-feeds` has since moved past its pin
+> (a 2026-11-13 merge of later upstream UI releases, not validated with this
+> profile). Deployment still builds the validated pinned commit `7ff09f4`. Do
+> not move a pin to a newer branch commit without a separate review, rebuild
+> and acceptance cycle.
+
+### Delivered versions
+
+| Part | Version delivered and validated |
+| --- | --- |
+| Platform (this repository) | The reviewed handover revision you received; `manifest.json` umbrella tag `v4.3.5` |
+| Incorporated AI Landing Zone foundation | `bicep-ptn-aiml-landing-zone` `v2.7.3` (`97e2375b89dcda4900d75aac9e7ffb7b20cce165`) |
+| UI | Commit `7ff09f49325d91018b2d443f993edf9b4cfd042d` (upstream base `v3.3.0`); image tag `frontend:7ff09f4` |
+| Orchestrator | Commit `a825e0bd2d0a7930da55a5ef9f7d20e2d4b036e2` (upstream base `v5.2.1`); image tag `orchestrator:a825e0b` |
+| Markdown worker | `ado-index-worker` commit `fdbf2b225b9a5042971b664cd0db12ef92688745`, package `ado-markdown-ingestion` `0.2.0`; no release tag yet ([step 7](azure-devops-markdown-poc.md#7-onboard-the-independent-worker)) |
+
+Image tags are the first seven characters of the source commit and are mutable
+names; record the pushed image **digests** from your own build as the
+deployment evidence.
+
+### Validation status at handover
+
+| Check | Result |
+| --- | --- |
+| Local Linux/amd64 builds of both selected revisions through credential-free corporate PyPI/npm mirrors | Passed |
+| `azd deploy` to a private validation environment; both active revisions Healthy at the versions above; UI and orchestrator HTTPS checks | Passed |
+| First knowledge-base retrieval | **Failed** until Search's outbound private links were approved ([step 3](azure-devops-markdown-poc.md#approve-search-outbound-access-to-the-embedding-model)) |
+| Chat retrieval after approval | Passed in the validation environment (operator-confirmed) |
+| Fresh component checkout when the UI branch has moved past its pin | Passed: deployment checks out the pinned commits `7ff09f4` and `a825e0b` (PowerShell and Bash hooks) |
+| Customer environment: retrieval smoke tests, grounded answers with citations, worker publication/recovery, access-mode and allow/deny tests | Customer acceptance gates |
+
+The retrieval failure surfaced in the orchestrator only as a generic HTTP 502.
+Search's response body reported that the query vectorizer received HTTP 403
+from the embedding endpoint. Publishing source does not update an Azure
+application; rebuild and redeploy the selected revisions on the customer runner.
+
+### Order of operations
+
+Steps are grouped by topic; follow this order:
+
+1. Obtain approvals and tools ([step 1](azure-devops-markdown-poc.md#1-prerequisites-and-policy)).
+2. Create the worker's Azure DevOps service connection and resolve its
+   service-principal object ID ([step 5, first part](azure-devops-markdown-poc.md#create-the-azure-devops-service-connection-before-provisioning));
+   provisioning needs it.
+3. Create the azd environment from the customer profile ([step 2](azure-devops-markdown-poc.md#2-prepare-a-new-environment)).
+4. Provision, connect the VPN, then complete connected post-provisioning
+   ([step 3](azure-devops-markdown-poc.md#3-provision-connect-then-complete-service-configuration)).
+5. Approve Search's outbound private links and pass the retrieval smoke tests
+   ([step 3](azure-devops-markdown-poc.md#approve-search-outbound-access-to-the-embedding-model)).
+6. Choose the access mode, set package registries and run `azd deploy`
+   ([step 4](azure-devops-markdown-poc.md#4-configure-authentication-and-deploy-applications)).
+7. Verify the state writer role, then export the schema and worker handoff
+   ([steps 5](azure-devops-markdown-poc.md#writer-roles-are-part-of-post-provision) and [6](azure-devops-markdown-poc.md#6-export-a-reviewed-worker-handoff)).
+8. Onboard the worker, publish, and rerun the smoke tests
+   ([step 7](azure-devops-markdown-poc.md#7-onboard-the-independent-worker)).
+9. Complete [acceptance](azure-devops-markdown-poc.md#acceptance-troubleshooting-and-recovery) and record versions and digests.
 
 ## 1. Prerequisites and policy
 
@@ -64,6 +114,9 @@ Before any writes, have administrators approve:
   configuration operations additionally need the relevant service data roles.
 - Required provider registration, model/version/SKU capacity, Search semantic
   capabilities and subscription policy. ARM validation does not guarantee capacity.
+- Approval, by an administrator of the Foundry account, of the Search service's
+  outbound private-endpoint requests created during provisioning
+  ([step 3](azure-devops-markdown-poc.md#approve-search-outbound-access-to-the-embedding-model)).
 - Ongoing VPN gateway, DNS resolver, NAT, private endpoint, database, model,
   Search and application costs.
 - Primary/Search region Canada East and application Cosmos DB Canada Central,
@@ -245,14 +298,178 @@ including `url`, `filepath`, `content`, `heading_path` and provenance. Environme
 variables affect runtime only when explicitly published/read by the component.
 See [index ownership](configuration.md#search-index-and-embedding-contract).
 
+### Approve Search outbound access to the embedding model
+
+Every user question is vectorized **by Azure AI Search**, using the index's
+Azure OpenAI vectorizer and the Search system identity. With public access
+disabled on the Foundry account, Search reaches it only through its own
+outbound shared private links. Provisioning **creates these requests, but they
+stay `Pending`** until a Foundry account administrator approves them. The
+UI/orchestrator private endpoint being `Approved` does not cover this path,
+and post-provisioning does **not** check these links for the `searchIndex`
+profile. While a request is pending, every retrieval fails: the orchestrator
+logs `Foundry IQ retrieve failed status=502`, and Search reports
+`The vectorization endpoint returned status code '403' (Forbidden)`.
+
+| Group ID (Search shared link) | Target | Purpose |
+| --- | --- | --- |
+| `openai_account` | Foundry account | Query-time vectorization; **required** for this profile |
+| `foundry_account`, `cognitiveservices_account` | Foundry account | Other Foundry IQ model calls |
+| `blob` | Application document storage | Native Blob indexing; not used by this profile |
+
+List both sides of each request. These are management-plane reads; the VPN is
+needed only for the App Configuration lookup:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$rawEnvironment = & azd env get-values --output json
+if ($LASTEXITCODE -ne 0) { throw 'Cannot load the selected azd environment.' }
+$azdEnvironment = ($rawEnvironment -join "`n") | ConvertFrom-Json -AsHashtable
+
+function Get-PlatformSetting([string]$Key) {
+    $raw = & az appconfig kv show `
+        --endpoint $azdEnvironment.APP_CONFIG_ENDPOINT `
+        --subscription $azdEnvironment.AZURE_SUBSCRIPTION_ID `
+        --key $Key --label agent-lz --auth-mode login `
+        --query value --output tsv --only-show-errors
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(($raw -join "`n"))) {
+        throw "Cannot read required App Configuration setting $Key."
+    }
+    return ($raw -join "`n").Trim()
+}
+
+$searchId = Get-PlatformSetting 'SEARCH_SERVICE_RESOURCE_ID'
+$foundryId = Get-PlatformSetting 'AI_FOUNDRY_ACCOUNT_RESOURCE_ID'
+
+# Search side: deployment-owned outbound requests.
+az rest --method get `
+    --url "https://management.azure.com$searchId/sharedPrivateLinkResources?api-version=2025-05-01" `
+    --query "value[].{name:name, groupId:properties.groupId, status:properties.status, state:properties.provisioningState}" `
+    --output table
+if ($LASTEXITCODE -ne 0) { throw 'Cannot read Search shared private links.' }
+
+# Target side: connections waiting on the Foundry account.
+az network private-endpoint-connection list --id $foundryId `
+    --query "[].{id:id, status:properties.privateLinkServiceConnectionState.status, description:properties.privateLinkServiceConnectionState.description}" `
+    --output table
+if ($LASTEXITCODE -ne 0) { throw 'Cannot read Foundry private endpoint connections.' }
+```
+
+A Foundry account administrator then approves the `openai_account` request,
+plus any other listed request the network owner accepts. Approve only a
+`Pending` connection whose name matches the exact Search shared-link name above
+(for example `spl-<search-service>-openai_account-1.<guid>`) and whose
+description is the deployment's request message. Never approve unknown
+requests or approve by prefix alone. Approval needs
+`Microsoft.CognitiveServices/accounts/privateEndpointConnectionsApproval/action`
+on the account; the portal path is **Foundry account > Networking > Private
+endpoint connections**. The equivalent command is:
+
+```powershell
+az network private-endpoint-connection approve `
+    --id '<exact-pending-connection-id-from-the-list>' `
+    --description 'Approved: Search query vectorization for <environment>'
+```
+
+Rerun the Search-side list until each approved link reports `Approved` and
+`Succeeded`; propagation can take several minutes. Keep Foundry public network
+access disabled. Do not use API keys or open public access as a workaround.
+Rejected or failed links must be investigated, not recreated by prefix.
+
+Then run both smoke tests from the VPN-connected host, in the same shell. They
+print only counts, never document content. The deployer identity needs Search
+index read access.
+
+```powershell
+$searchEndpoint = (Get-PlatformSetting 'SEARCH_SERVICE_QUERY_ENDPOINT').TrimEnd('/')
+$foundryIqApi = Get-PlatformSetting 'FOUNDRY_IQ_API_VERSION'
+$indexName = $azdEnvironment.SEARCH_RAG_INDEX_NAME
+$knowledgeBase = $azdEnvironment.KNOWLEDGE_BASE_NAME
+$knowledgeSource = $azdEnvironment.FOUNDRY_IQ_KNOWLEDGE_SOURCE_NAME
+$bodyPath = Join-Path ([IO.Path]::GetTempPath()) "agentlz-smoke-$([guid]::NewGuid().ToString('N')).json"
+try {
+    # 1. Query-time vectorization through the Search shared private link.
+    '{"vectorQueries":[{"kind":"text","text":"connectivity check","fields":"contentVector","k":1}],"select":"id","top":1}' |
+        Set-Content -LiteralPath $bodyPath -Encoding utf8NoBOM
+    az rest --method post --resource https://search.azure.com `
+        --url "$searchEndpoint/indexes/$indexName/docs/search?api-version=2025-05-01-preview" `
+        --headers Content-Type=application/json --body "@$bodyPath" `
+        --query '{returned: length(value || `[]`)}'
+    if ($LASTEXITCODE -ne 0) { throw 'Vector query failed; check shared-link approval and the Search identity''s model access.' }
+
+    # 2. The same knowledge-base retrieve request the orchestrator sends.
+    (@{
+        intents = @(@{ search = 'connectivity check'; type = 'semantic' })
+        knowledgeSourceParams = @(@{
+            knowledgeSourceName = $knowledgeSource; kind = 'searchIndex'
+            includeReferences = $true; includeReferenceSourceData = $false
+        })
+    } | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath $bodyPath -Encoding utf8NoBOM
+    az rest --method post --resource https://search.azure.com `
+        --url "$searchEndpoint/knowledgebases/$knowledgeBase/retrieve?api-version=$foundryIqApi" `
+        --headers Content-Type=application/json --body "@$bodyPath" `
+        --query '{references: length(references || `[]`), failedSources: length((activity || `[]`)[?error])}'
+    if ($LASTEXITCODE -ne 0) { throw 'Knowledge-base retrieve failed; Search returns the failing source in its error body.' }
+} finally {
+    Remove-Item -LiteralPath $bodyPath -Force -ErrorAction SilentlyContinue
+}
+```
+
+Both commands must succeed with `failedSources: 0`. Zero results are expected
+before the worker's first publication; repeat both checks afterwards, because
+an empty index does not prove relevance or citations. If vectorization still
+returns 403 after `Approved`/`Succeeded`, check that the Search system identity
+has **Cognitive Services OpenAI User** (or an equivalent role) on the Foundry
+account, then review Microsoft's current Foundry IQ private-outbound guidance
+with the network owner. Do not enable public access to work around it.
+
 ## 4. Configure authentication and deploy applications
 
-Follow [application authentication](application-auth.md) for a customer-owned
-single-tenant Entra web app, consent and allowed users. The canonical UI callback
-is `<UI-HTTPS-origin>/auth/oauth/azure-ad/callback`. Configure OAuth client/tenant,
-scopes, `CHAINLIT_URL` and a persistent session-signing secret. Credentials belong
-in Key Vault through approved references, not this JSON profile.
-Keep `ALLOW_ANONYMOUS=false`; VPN authentication is not application login.
+### Choose the application access mode
+
+The POC **defaults to anonymous access** inside the private network. Users with
+access to the customer VPN can chat without signing in. Authenticated
+Entra sign-in is an opt-in mode. The decision is a runtime App Configuration
+setting under label `agent-lz`; `azd env set ALLOW_ANONYMOUS ...` on its own
+changes nothing, because the platform does not publish that key.
+
+| | Anonymous (default) | Authenticated (opt-in) |
+| --- | --- | --- |
+| Who can chat | Anyone who can reach the private UI through the VPN | Signed-in customer-tenant users, optionally restricted by admission lists |
+| `ALLOW_ANONYMOUS` (App Configuration, `agent-lz`) | `true` | `false` |
+| `OAUTH_AZURE_AD_*`, `CHAINLIT_AUTH_SECRET` | **Must stay unset** | Required; see [application authentication](application-auth.md) |
+| Retrieval identity | Service identity only; every user can retrieve all indexed content | Service identity plus the user's forwarded token; the index has no permission filter, so results are not trimmed per document |
+| Conversation history | Not tied to a person | Per signed-in user |
+
+The pinned UI enables sign-in whenever OAuth client ID, tenant ID and client
+secret are all configured, **even if `ALLOW_ANONYMOUS=true`**. To stay
+anonymous, do not publish OAuth settings. With `ALLOW_ANONYMOUS=false` and no
+OAuth configuration, the UI starts in an "authentication required" mode that
+answers HTTP 503. In both modes the VPN, not the application, is the network
+boundary, and both modes are limited to the approved common-audience content
+described under [acceptance](azure-devops-markdown-poc.md#acceptance-troubleshooting-and-recovery).
+
+For the default anonymous mode, record the decision explicitly so a later
+change is deliberate:
+
+```powershell
+$appConfigEndpoint = (& azd env get-values --output json | ConvertFrom-Json).APP_CONFIG_ENDPOINT
+az appconfig kv set --endpoint $appConfigEndpoint --auth-mode login `
+    --key ALLOW_ANONYMOUS --value true --label agent-lz --yes
+if ($LASTEXITCODE -ne 0) { throw 'Cannot publish the application access mode.' }
+```
+
+For authenticated mode, follow [application authentication](application-auth.md)
+for the customer-owned single-tenant Entra web app, consent and allowed users,
+then publish `ALLOW_ANONYMOUS=false` the same way. The canonical UI callback
+is `<UI-HTTPS-origin>/auth/oauth/azure-ad/callback`. Credentials belong in Key
+Vault through approved references, not the JSON profile.
+
+Both applications read this setting at startup. When changing modes on running
+applications, restart both active revisions (portal: **Container App >
+Revisions and replicas > Restart**) or rerun `azd deploy`, then verify the
+expected behavior in a fresh browser session. VPN authentication is not
+application login.
 
 ### Configure package registries before building
 
@@ -325,6 +542,18 @@ after the same `azd env unset` commands. Remove matching values from the local
 profile if it will be imported again. Also check host pip/npm configuration
 files and any `PIP_EXTRA_INDEX_URL` before assuming public or mirror-only access.
 
+### Component checkouts
+
+`azd deploy` builds the UI and orchestrator from sibling folders next to this
+repository (`..\agent-app-ui`, `..\agent-app-orchestrator`). When a folder is
+missing, it clones the repository and checks out the **exact pinned commit**
+(a detached checkout is expected). When a folder already exists, it builds it
+only if that folder is a clean checkout of the pinned commit; it never resets
+or switches an existing folder. If deployment reports that a component "must
+resolve to" its pin, move that folder aside (do not discard someone's work)
+and rerun `azd deploy`. The bundled ingestion component is not deployed by this
+profile.
+
 ### Build or retry application deployment
 
 From a connected build host, after saving any registry overrides:
@@ -343,9 +572,12 @@ from their Docker contexts. Exclusions are not a general secret scanner.
 After a package-download failure, correct the settings above and rerun
 `azd deploy`; registry changes do not require another `azd provision`.
 See also the [local-build constraints](configuration.md#local-image-builds).
-Verify both active revisions, recorded image digests, authenticated UI access,
-orchestrator connectivity and a known-answer query. Container Apps provisioning
-state alone does not establish application readiness.
+Verify both active revisions, recorded image digests, UI access in the selected
+[access mode](azure-devops-markdown-poc.md#choose-the-application-access-mode), orchestrator connectivity
+and a known-answer query after the
+[retrieval smoke tests](azure-devops-markdown-poc.md#approve-search-outbound-access-to-the-embedding-model)
+pass. Container Apps provisioning state alone does not establish application
+readiness.
 
 ## 5. Integrated control-state store and worker identity
 
@@ -615,18 +847,40 @@ Review it under the customer's data policy.
 
 ## 7. Onboard the independent worker
 
-Obtain the delivered worker's `docs/deployment.md`, `docs/operations.md`,
-templates, configuration examples and identity tooling together with its code.
-They are not files in this platform repository. Pin its template ref and full
-commit. Arrange an approved delivery if the customer cannot access the worker
-repository; do not treat this guide as a replacement for that implementation.
+The worker is delivered from its own public repository:
+`https://github.com/AsmaeFILALI/ado-index-worker`. It is not part of this
+platform repository, and this guide does not replace its documentation. The
+delivered revision is the initial public release on `main`: commit
+`fdbf2b225b9a5042971b664cd0db12ef92688745`, package `ado-markdown-ingestion`
+`0.2.0`. **No release tag exists yet.** The worker guide's Step 7 pins
+production pipelines to a tag plus `workerCommit`; until an approved tag is
+published, pin that full commit and record it. A branch name alone is not a pin.
+
+| Worker file | Use |
+| --- | --- |
+| `docs/deployment.md` | Step-by-step setup: hosting the worker, configuration files, local rehearsal, tagging/pinning, pipeline creation and first publication. Its Step 3 creates the **same** service connection as [step 5](azure-devops-markdown-poc.md#5-integrated-control-state-store-and-worker-identity) here; create it once. Its Step 5.5 takes the schema and hash from [step 6](azure-devops-markdown-poc.md#6-export-a-reviewed-worker-handoff); Appendix A maps the platform handoff to worker configuration. |
+| `docs/operations.md`, `docs/limitations.md` | Day-2 operation, recovery and known limits |
+| `examples/pipeline-source.toml`, `examples/publishing-config.toml`, `examples/worker-config.toml` | Customer source, publishing and worker configuration templates |
+| `examples/admission.template.json`, `examples/admission.scope.template.json` | Content-admission inputs |
+| `examples/content-repo/azure-pipelines.yml` | Pipeline for the content repository; pin the worker template ref **and** full commit |
+| `scripts/New-IngestionIdentity.ps1` | Publishing-identity setup; run in preview first and apply only approved scopes |
+| `pyproject.toml`, `uv.lock` | Locked Python 3.12 dependencies |
+
+Use the **platform-rendered schema and checksum** from step 6 for the target
+index. The worker's `examples/index-schema*.json` files are illustrations, not
+a substitute. Use the same publishing identity whose service-principal object
+ID was supplied in [step 5](azure-devops-markdown-poc.md#5-integrated-control-state-store-and-worker-identity).
+If the customer cannot reach GitHub, arrange an approved mirror of that exact
+commit rather than copying a local checkout.
 
 Prepare source repository ID, full ref, immutable commit and include/exclude
 rules; platform schema/hash; protected environment; and service
 connection authorized only to the ingestion pipeline.
 The worker needs selected-index document access, separate read-only schema
 permission, OpenAI inference and exact container-scoped Blob permission.
-Search's query-vectorizer identity also needs platform-managed embedding access.
+Search's query vectorizer additionally needs the approved outbound private link
+from [step 3](azure-devops-markdown-poc.md#approve-search-outbound-access-to-the-embedding-model); the
+worker's own embedding calls go through its private agent network instead.
 Repository Build Service checkout permissions are separate.
 
 Private publication requires an approved VNet-connected agent with private DNS.
@@ -664,13 +918,19 @@ For worker-only development use `uv sync --locked --python 3.12 --group dev`,
 prepare its verified tokenizer cache, then run `uv run --locked ado-ingest plan`
 with the reviewed source TOML. `plan` is offline after dependencies/cache are
 prepared. `sync`/`reconcile`/`rebuild` publish; they are not preview commands.
-Customer-specific authenticated startup remains an acceptance check.
+Startup in the customer's selected access mode remains an acceptance check.
 
 ## Acceptance, troubleshooting and recovery
 
 - Check a clean second checkout reproduces profile composition and builds.
 - Verify public-network-disabled resources, normal private DNS/TLS and scoped
   runtime/worker permissions; a 403 can be networking or authorization.
+- Confirm every required Search shared private link is `Approved`/`Succeeded`
+  and both [retrieval smoke tests](azure-devops-markdown-poc.md#approve-search-outbound-access-to-the-embedding-model)
+  pass, before and after first publication.
+- Confirm the selected [access mode](azure-devops-markdown-poc.md#choose-the-application-access-mode):
+  anonymous chat works without sign-in, or signed-out callers are refused and
+  approved users sign in.
 - Confirm generated names, no accidental old POC accounts, exact image digests,
   completed configuration and persisted runtime strategy.
 - Validate full schema, identical ingestion/query embeddings and source citations.
@@ -679,10 +939,21 @@ Customer-specific authenticated startup remains an acceptance check.
 - Restore compatible image/config/schema bindings deliberately. Do not run full
   hooks as destructive index repair or interpret Blob restore as Search rollback.
 
+| Symptom | Likely cause and check |
+| --- | --- |
+| Orchestrator logs `Foundry IQ retrieve failed status=502` | Run the knowledge-base smoke test to see Search's actual error. A vectorization `403` means the `openai_account` link is not approved or the Search identity lacks model access. |
+| UI returns HTTP 503 "authentication required" | `ALLOW_ANONYMOUS=false` without complete OAuth settings; choose a mode deliberately |
+| Sign-in appears although anonymous was intended | OAuth settings are published; remove them through the approved configuration process and restart |
+| `azd deploy` reports `<component> must resolve to <commit> but ... is at ...` | An existing sibling folder is at another commit; move it aside and rerun so [deployment checks out the pin](azure-devops-markdown-poc.md#component-checkouts) |
+| `azd deploy` reports `pinned commit ... is not in the history of branch ...` | The source branch was rewritten or the pin is wrong; restore the branch or review the pin; do not edit the hook |
+| Build fails downloading Python/npm packages | [Package registry settings](azure-devops-markdown-poc.md#configure-package-registries-before-building) |
+| Hooks report public DNS answers | [Private access](private-access.md#verify-dns-routing-and-service-access) |
+
 Azure DevOps permissions are not automatically copied into Search. Until an
 approved permission contract and allow/deny tests pass, use synthetic or
 explicitly admitted common-audience non-sensitive content only. Authentication,
 private networking and fluent answers do not establish document authorization.
+In anonymous mode every VPN user can retrieve everything in the index.
 
 Before delivery record platform/component/worker commits, image digests,
 documentation revision, schema/hash, nonsecret bindings, tested commands and

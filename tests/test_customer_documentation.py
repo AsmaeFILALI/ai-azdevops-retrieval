@@ -117,3 +117,19 @@ def test_private_access_requires_suffixes_reimport_and_normal_dns_validation():
         "Resolve-DnsName $hostnameToCheck -Type A",
     ):
         assert required in guide
+
+
+def test_runbook_covers_search_outbound_approval_access_modes_and_worker_source():
+    guide = (DOCS / "azure-devops-markdown-poc.md").read_text(encoding="utf-8")
+    for required in (
+        "openai_account", "sharedPrivateLinkResources",
+        "az network private-endpoint-connection approve",
+        "vectorQueries", "/retrieve?api-version=",
+        "ALLOW_ANONYMOUS --value true", "even if `ALLOW_ANONYMOUS=true`",
+        "https://github.com/AsmaeFILALI/ado-index-worker",
+        "### Component checkouts", "is not in the history of branch",
+    ):
+        assert required in guide
+    assert "Keep `ALLOW_ANONYMOUS=false`" not in guide
+    plan = (ROOT / "docs" / "plans" / "customer-deployment-handover.md").read_text(encoding="utf-8")
+    assert "Use `infra/ingestion-state.bicep` separately" not in plan
