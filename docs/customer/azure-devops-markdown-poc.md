@@ -937,7 +937,10 @@ role-definition and role-assignment rights there.
 
 Publishing must run on a self-hosted Azure DevOps agent that resolves the
 private endpoints and reaches them on port 443 (worker Step 4.3). Microsoft-hosted
-agents and a laptop VPN do not reach them. The platform reserves
+agents cannot reach them, and your laptop's VPN does not extend to them. For
+short POC runs, a self-hosted agent on a machine connected to the
+[point-to-site VPN with private DNS](private-access.md#prepare-windows-split-dns-settings)
+works while that machine stays connected. For anything sustained, the platform reserves
 `devops-build-agents-subnet` (`10.77.3.96/27`) in the workload VNet for this,
 but **does not deploy an agent**. A VM in that subnet resolves private
 endpoints through the VNet's linked private DNS zones.
