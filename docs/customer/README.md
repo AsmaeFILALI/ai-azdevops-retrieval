@@ -56,12 +56,15 @@ authentication guide.
 This change removes the **documentation-repository** access requirement. It
 does not make the deployment an offline or single-repository source bundle:
 
-- The deployer still fetches UI/orchestrator source from the repositories and
-  full commits in [manifest.json](../../manifest.json). Access to approved
-  package/container registries is also required.
+- The deployer still needs network access to the UI/orchestrator repositories
+  in [manifest.json](../../manifest.json); it checks out their pinned full commits
+  (see the runbook's [component checkouts](azure-devops-markdown-poc.md#component-checkouts)).
+  Access to approved package/container registries is also required.
 - The independent Azure DevOps Markdown worker, its templates, deployment and
   operations guides, identity setup and source configuration remain a separate
-  deliverable. This repository does not contain its executable implementation.
+  deliverable in `https://github.com/AsmaeFILALI/ado-index-worker`. This
+  repository does not contain its executable implementation; see
+  [runbook step 7](azure-devops-markdown-poc.md#7-onboard-the-independent-worker).
 - If the customer can access **only this repository**, with no access to those
   sources or approved build artifacts, application/worker delivery is still
   blocked. Arrange a reviewed source mirror or artifact delivery before

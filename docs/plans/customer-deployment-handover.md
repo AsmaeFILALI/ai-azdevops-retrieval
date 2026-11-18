@@ -68,9 +68,15 @@ implementation backlog. Completed source/configuration/build work is excluded.
 The existing network addresses remain unchanged. No item below authorizes a
 push, merge, release, permission change, document publication or paid deployment.
 
-#### Worker repository: `injection-pipeline`
+#### Worker repository: `injection-pipeline` (public delivery: `ado-index-worker`)
 
-Current source is `generalisation` at `335df34`. The separately committed
+The customer-facing delivery repository is
+`https://github.com/AsmaeFILALI/ado-index-worker`; its `main` initial public
+release is `fdbf2b225b9a5042971b664cd0db12ef92688745` (2026-11-17). Confirm
+that release contains the reviewed WRK-01 integration before treating WRK-01
+and WRK-02 as complete, and record the reviewed tag/commit the customer pins.
+
+Previous source was `generalisation` at `335df34`. The separately committed
 handoff guidance is on `feature/platform-handover-docs` at `868ad3a`; it is not
 yet part of `generalisation`. The prospective combination was tested in an
 isolated snapshot without merging or changing either worktree.
@@ -92,20 +98,20 @@ knowledge-source promotion, UI/orchestrator source, or query-time access control
 
 #### Current repository: Landing Zone (`ai-azdevops-retrieval`)
 
-Current source is on `feature/customer-deployment-handover`; use Git HEAD and
-the manifest for the current source/pin combination.
-The portable profile, state parameters, strategy publisher, handoff exporter,
-clean-source guards and regressions are already implemented and committed.
+The platform handover was integrated into `develop` through PR #2; use Git HEAD
+and the manifest for the current source/pin combination.
+The portable profile, integrated state store, strategy publisher, handoff
+exporter, clean-source guards and regressions are already implemented and committed.
 
 Paths in this table are relative to the **current Landing Zone repository**.
 
 | ID | Remaining todo | Dependency / done condition | Original tasks |
 | --- | --- | --- | --- |
-| LZ-01 | Publish/review this platform feature branch and integrate it into `develop`. | Approved repository/PR flow, passing checks and no unrelated demo data. Do not target `main` or publish a release as an implicit step. | T003, T027 |
-| LZ-03 | Finalize customer tenant/subscription/deployer, resource-group inputs, Entra sign-in, model/API/inference-policy choices and deployment approvals in their own environment. | Customer administrators approve context, quotas, costs, data audience and roles. Use `samples/customer-poc/azd-env.example.json`; retain all existing CIDRs and never copy our `.azure` state. | T003, T024, T025 |
-| LZ-04 | Validate/provision the approved new private foundation and complete connected post-provisioning, application deployment/authentication and separate state-store deployment. | Requires LZ-02-LZ-03 and WRK-03 writer identity. Verify actual private DNS/TLS, service security, runtime strategy, active images and scoped roles. Use `infra/ingestion-state.bicep` separately; no wholesale redeployment of the existing POC. | T024, T025 |
+| LZ-01 | Done: platform branch reviewed and merged into `develop` (PR #2). | Release to `main` remains a separate, explicitly approved workflow. | T003, T027 |
+| LZ-03 | Finalize customer tenant/subscription/deployer, resource-group inputs, application access mode, model/API/inference-policy choices and deployment approvals in their own environment. | Customer administrators approve context, quotas, costs, data audience and roles. Use `samples/customer-poc/azd-env.example.json`; retain all existing CIDRs and never copy our `.azure` state. | T003, T024, T025 |
+| LZ-04 | Validate/provision the approved new private foundation, including the integrated state store, and complete connected post-provisioning, Search outbound private-link approval and application deployment in the selected access mode. | Requires LZ-02-LZ-03 and WRK-03 writer identity. Verify actual private DNS/TLS, service security, runtime strategy, active images, scoped roles and both retrieval smoke tests (runbook step 3). State storage is part of `azd provision`; do not deploy `infra/ingestion-state.bicep` separately or redeploy the existing POC wholesale. | T024, T025 |
 | LZ-05 | Create/validate the explicit customer index generation and export its full schema/hash and nonsecret worker bindings. | Requires LZ-04. Use `config/search/markdown_index.py` and `config/deployment/ingestion_handoff.py`; verify current serving/non-serving bindings separately, matching embeddings and exact state output. Supply these artifacts to WRK-04. | T025, T026, T027 |
-| LZ-06 | Verify authenticated application behavior, grounded answers, source citations and the approved access boundary; assemble the final compatible handover. | Requires LZ-04-LZ-05, WRK-06 and the published repository-local customer docs. Include exact platform/component/worker/docs revisions, image identities, schema pin, tested commands, recovery guidance and residual risks. Protected content still needs implemented/validated permission enforcement. | T024, T026, T027 |
+| LZ-06 | Verify application behavior in the selected access mode, grounded answers, source citations and the approved access boundary; assemble the final compatible handover. | Requires LZ-04-LZ-05, WRK-06 and the published repository-local customer docs. Include exact platform/component/worker/docs revisions, image identities, schema pin, tested commands, recovery guidance and residual risks. Protected content still needs implemented/validated permission enforcement. | T024, T026, T027 |
 
 Landing Zone ownership includes infrastructure, platform configuration, schema,
 retrieval bindings and final integration evidence. It does not absorb the worker
@@ -120,7 +126,7 @@ pass. No registry image or Azure application was updated.
 
 | Owning repository | Outstanding dependency | Consumer |
 | --- | --- | --- |
-| `agent-app-ui` | Source publication completed: `AsmaeFILALI/agent-app-ui`, `feature/customer-build-feeds` (`7ff09f4`). A real component release/tag remains optional separately approved promotion work. | LZ-02 completed; LZ-04 consumes the pin |
+| `agent-app-ui` | Source publication completed: `AsmaeFILALI/agent-app-ui`, `feature/customer-build-feeds` (`7ff09f4`). On 2026-11-13 that branch moved to `f53b597` (merge of later upstream releases, unvalidated here). `azd deploy` now checks out the pinned commit from the branch history, so the validated `7ff09f4` is still delivered. A tag or a reviewed re-pin remains optional, separately approved work. | LZ-02 completed; LZ-04 consumes the pin |
 | `agent-app-orchestrator` | Source publication completed: `AsmaeFILALI/agent-app-orchestrator`, `feature/citation-guard` (`a825e0b`). The documented retrieval/citation limitations still apply. | LZ-02 completed; LZ-04 consumes the pin |
 | Central `Azure/AI-Landing-Zones` docs | Immutable customer guide source is published in `AsmaeFILALI/AI-Landing-Zones` at `4fac1bcc7b674ca45d5517a209b78f5ff063a608`, and README links directly to it. Official-site publication is separate. | LZ-06, WRK-04 can use the accessible source now |
 

@@ -51,7 +51,10 @@ The equal index names are required, not interchangeable overrides.
   is a requirements contract, not the full deployable index body.
 - The schema uses 3072-dimensional `contentVector`, HNSW/cosine and an Azure
   OpenAI query vectorizer. Ingestion/query embeddings must use the same
-  `text-embedding-3-large` deployment/model/dimensions.
+  `text-embedding-3-large` deployment/model/dimensions. Search runs the query
+  vectorizer with its system identity through an outbound shared private link
+  that a Foundry administrator must
+  [approve](azure-devops-markdown-poc.md#approve-search-outbound-access-to-the-embedding-model).
 - Semantic priorities are title `title`, content `content`, then keywords
   `heading_path` and `category`.
 - Connected [post-provision Search setup](../../config/search/setup.py) creates

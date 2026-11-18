@@ -178,6 +178,12 @@ index/knowledge objects. It does not rerun the entire infrastructure deployment.
 Fix reported failures; do not interpret a deferred or failed hook as completed
 setup.
 
+The hook does not approve, or check, Search's outbound private links to the
+Foundry account for this `searchIndex` profile. Until a Foundry administrator
+approves them, every retrieval fails with a vectorization 403. Complete the
+runbook's [outbound-access approval and smoke tests](azure-devops-markdown-poc.md#approve-search-outbound-access-to-the-embedding-model)
+before application testing.
+
 After completing [application authentication](application-auth.md), run
 `azd deploy` from the connected host. Local builds require healthy Docker,
 access to approved package sources and private registry connectivity. See

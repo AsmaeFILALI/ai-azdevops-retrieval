@@ -4,6 +4,10 @@ Return to the [deployment runbook](azure-devops-markdown-poc.md).
 This profile uses **classic UI/orchestrator Container Apps**, not hosted
 Foundry Agent Service. A VPN connection does not authenticate a user to the app.
 
+This page describes the **authenticated opt-in** mode. The POC defaults to
+anonymous access inside the private network; choose a mode first using the
+runbook's [access-mode comparison](azure-devops-markdown-poc.md#choose-the-application-access-mode).
+
 ## Customer-owned Entra registration
 
 Have the customer identity administrator:
@@ -72,8 +76,9 @@ Redirect mismatch concerns the exact origin/callback. Consent/refresh errors
 concern tenant, scopes, credential lifetime and consent. Private endpoint
 failures concern [network/DNS access](private-access.md); service-role failures
 concern the actual caller identity and approved scope.
-Do not enable anonymous access, replace a delegated caller with fabricated
-headers or weaken data access as a recovery measure.
+Once authenticated mode is adopted, do not switch to anonymous access, replace
+a delegated caller with fabricated headers or weaken data access as a recovery
+measure; changing modes is a deliberate owner decision.
 
 Azure DevOps repository permissions are not automatically propagated into
 Search. Until an approved document-permission contract and independent-user

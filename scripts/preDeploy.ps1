@@ -420,7 +420,23 @@ foreach ($c in $manifest.components) {
     Write-Host ("  ℹ️  '{0}' already exists at {1}, verifying pin." -f $name, $target) -ForegroundColor Yellow
   } else {
     try {
-      if ($refType -eq 'branch') {
+      if ($refType -eq 'branch' -and $expectedCommit) {
+        # The full commit is the pin; the branch only locates it. Clone the
+        # branch history without file contents, require the pin to be part of
+        # that history, then check out exactly the pinned commit.
+        git clone --filter=blob:none --no-checkout --branch $ref --no-progress -q $repo $target 1>$null 2>$null
+        if ($LASTEXITCODE -ne 0) {
+          throw "$name`: git clone failed."
+        }
+        git -C $target merge-base --is-ancestor $expectedCommit HEAD 1>$null 2>$null
+        if ($LASTEXITCODE -ne 0) {
+          throw "$name`: pinned commit $expectedCommit is not in the history of branch $ref."
+        }
+        git -C $target -c advice.detachedHead=false checkout -q --detach $expectedCommit 1>$null 2>$null
+        if ($LASTEXITCODE -ne 0) {
+          throw "$name`: git checkout of pinned commit $expectedCommit failed."
+        }
+      } elseif ($refType -eq 'branch') {
         git clone --depth 1 --branch $ref --no-progress -q $repo $target 1>$null 2>$null
         if ($LASTEXITCODE -ne 0) {
           throw "$name`: git clone failed."
