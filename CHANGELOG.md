@@ -80,6 +80,8 @@
 - Markdown worker delivered separately: `AsmaeFILALI/ado-index-worker`
   `0.2.0`; first publication remains a customer-run gate.
 
+## [v4.3.5] - 2026-10-26
+
 ### Changed
 - Rename the subscription header to "Agent Landing Zone - prod subscription"
   in all three reference architecture PNGs, matching the editable draw.io source.
